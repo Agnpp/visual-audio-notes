@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>图音笔记</title>
+  <link rel="stylesheet" href="/app.css">
+  <script>window.VAN_TOKEN = "__VAN_TOKEN__"; window.VAN_LANGUAGE = "__VAN_LANGUAGE__";</script>
+  <script src="/i18n.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-defs" aria-hidden="true"><defs>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="m4 4-2 11v5h20v-5L20 4ZM2 15h6l2 3h4l2-3h6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></symbol>
+    <symbol id="i-review" viewBox="0 0 24 24"><path d="M14 3H5v18h14v-9M9 8h3M9 12h2M9 16h5m1-10 3-3 3 3-7 7-4 1 1-4Z"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 8v13h16V8M3 3h18v5H3ZM9 12h6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 4 2 2v4l4 3 3-1 3 1 4-3v-4l2-2-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"/></symbol>
+    <symbol id="i-audio" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="2"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7ZM20 2v4m-2-2h4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8Z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3ZM3 6V4h7l2 2h7v2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6ZM8 12l3 3 5-6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 3h13l3 3v15H4ZM8 3v6h8V3M8 21v-8h8v8"/></symbol>
+  </defs></svg>
+
+  <header class="topbar">
+    <div class="brand-block"><button id="menu-button" class="icon-button" aria-label="收起导航" title="收起导航"><svg class="icon"><use href="#i-menu"/></svg></button><a class="brand" href="#" aria-label="图音笔记首页"><span class="brand-mark"><i></i><i></i><i></i></span><span>图音笔记</span><small>预览版</small></a></div>
+    <label class="search-box"><svg class="icon"><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜索资料和笔记" autocomplete="off" aria-label="搜索资料和笔记"><kbd>/</kbd></label>
+    <div class="top-actions"><select id="interface-language" class="language-select" aria-label="界面和新笔记语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select><span class="local-badge"><span class="status-dot"></span> 本机资料库</span><button id="settings-button" class="icon-button" title="AI 连接设置" aria-label="AI 连接设置"><svg class="icon"><use href="#i-settings"/></svg></button></div>
+  </header>
+
+  <aside class="sidebar">
+    <button id="import-button" class="compose-button"><svg class="icon"><use href="#i-plus"/></svg><span>导入资料</span></button>
+    <nav aria-label="资料导航">
+      <button class="nav-item active" data-view="all"><svg class="icon"><use href="#i-inbox"/></svg><span>全部资料</span><b id="count-all">0</b></button>
+      <button class="nav-item" data-view="review"><svg class="icon"><use href="#i-review"/></svg><span>待核对</span><b id="count-review">0</b></button>
+      <button class="nav-item" data-view="archived"><svg class="icon"><use href="#i-archive"/></svg><span>已归档</span><b id="count-archived">0</b></button>
+    </nav>
+    <div class="sidebar-divider"></div><div class="sidebar-caption">整理方式</div>
+    <div class="sidebar-guide"><span class="guide-number">1</span><div><strong>放入杂乱的资料</strong><span>课件、图片、录音</span></div></div>
+    <div class="sidebar-guide"><span class="guide-number">2</span><div><strong>留下真正的重点</strong><span>原文可查，讲解可回听</span></div></div>
+    <div class="sidebar-guide"><span class="guide-number">3</span><div><strong>整理好，保存下来</strong><span>资料与笔记一起归档</span></div></div>
+    <div class="sidebar-bottom"><svg class="icon"><use href="#i-shield"/></svg><span>资料保存在这台电脑<br><small>AI 仅在你选择后使用</small></span></div>
+  </aside>
+
+  <main class="workspace">
+    <section class="project-pane" aria-label="资料列表">
+      <div class="list-heading"><div><h1 id="list-title">全部资料</h1><span id="list-subtitle">每一份资料，都有条理</span></div><button id="refresh-button" class="icon-button" title="刷新资料" aria-label="刷新资料"><svg class="icon"><use href="#i-inbox"/></svg></button></div>
+      <div class="list-filter"><span id="list-count">0 份资料</span><span>最近导入 <svg class="icon"><use href="#i-down"/></svg></span></div>
+      <div id="project-list" class="project-list" aria-live="polite"><div class="list-empty"><span class="list-empty-icon"><svg class="icon"><use href="#i-folder"/></svg></span><strong>还没有资料</strong><p>导入后，资料会收在这里</p></div></div>
+      <div class="list-footer"><span class="status-dot"></span><span id="connection-summary">无需 AI 也能整理与归档</span></div>
+    </section>
+
+    <section class="reader-pane" aria-label="笔记阅读区">
+      <div id="welcome" class="welcome">
+        <div class="welcome-topline"><span class="eyebrow">从零散，到有条理</span><span class="small-pill">你的个人资料库</span></div>
+        <div class="welcome-content">
+          <div class="paper-illustration" aria-hidden="true"><div class="paper-back"><span></span><span></span><span></span></div><div class="paper-front"><div class="paper-heading"><span></span><i></i></div><div class="paper-diagram"><i></i><i></i><i></i></div><div class="paper-lines"><i></i><i></i><i></i></div></div><div class="audio-card"><svg class="icon"><use href="#i-audio"/></svg><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>讲解</span></div><div class="check-float"><svg class="icon"><use href="#i-check"/></svg></div></div>
+          <h2>把资料放进来，<br>把重点留下来。</h2><p class="welcome-description">课件里的图，录音里的话，零散的记录。<br>整理在一起，变成可以回看、回听的笔记。</p>
+          <button id="welcome-import" class="primary-button"><svg class="icon"><use href="#i-plus"/></svg><span id="welcome-import-label">导入第一份资料</span><svg class="icon end-icon"><use href="#i-arrow"/></svg></button>
+          <div class="supported-types"><span>课件 / 图片 / Office</span><i>+</i><span>录音</span><i>+</i><span>已有字幕 <small>可选</small></span></div>
+        </div>
+        <div class="welcome-features"><div><span class="feature-icon blue"><svg class="icon"><use href="#i-folder"/></svg></span><strong>原件始终保留</strong><p>整理不改变你的原始资料</p></div><div><span class="feature-icon lilac"><svg class="icon"><use href="#i-audio"/></svg></span><strong>重点有据可查</strong><p>分清录音讲解与课件补充</p></div><div><span class="feature-icon green"><svg class="icon"><use href="#i-archive"/></svg></span><strong>随时保存归档</strong><p>笔记和附件一起带走</p></div></div>
+      </div>
+
+      <div id="project-reader" class="project-reader" hidden>
+        <div class="reader-toolbar"><span id="reader-location" class="breadcrumb">资料库 <svg class="icon"><use href="#i-chevron"/></svg> 笔记</span><div class="reader-tools"><button id="model-button" class="model-button" title="配置整理模型"><svg class="icon"><use href="#i-spark"/></svg><span id="model-label">选择 AI 连接</span><svg class="icon"><use href="#i-down"/></svg></button><button id="add-files-button" class="text-button compact" title="向当前笔记添加课件、图片、录音或字幕"><svg class="icon"><use href="#i-plus"/></svg>添加资料</button><button id="open-export-button" class="icon-button" title="打开归档文件夹" aria-label="打开归档文件夹" hidden><svg class="icon"><use href="#i-folder"/></svg></button><button id="export-button" class="secondary-button compact"><svg class="icon"><use href="#i-download"/></svg>保存归档</button></div></div>
+        <div class="project-title-block"><div class="title-meta"><span class="document-label">资料笔记</span><span id="project-status" class="status-pill">已导入</span></div><h2 id="project-title"></h2><p id="project-meta"></p><div id="file-chips" class="file-chips"></div></div>
+        <div id="job-banner" class="job-banner" hidden><span class="spinner"></span><div class="job-copy"><strong id="job-title">正在整理</strong><p id="job-message"></p></div><button id="cancel-job" type="button" class="text-button stop-button" hidden>停止整理</button></div>
+        <div class="reader-tabs" role="tablist"><button class="reader-tab active" role="tab" aria-selected="true" data-tab="notes">重点笔记</button><button class="reader-tab" role="tab" aria-selected="false" data-tab="sources">原始资料</button><button class="reader-tab" role="tab" aria-selected="false" data-tab="transcript">录音转写 <span id="transcript-count"></span></button></div>
+        <div id="reader-scroll" class="reader-scroll">
+          <section id="notes-view" class="tab-panel">
+            <div class="notes-intro"><div><h3>把讲解，整理成重点</h3><p id="ai-description">按需识别录音和图片，再整理有来源的重点。</p></div><button id="ai-button" class="primary-button compact"><svg class="icon"><use href="#i-spark"/></svg><span>开始整理</span></button></div>
+            <div id="capability-notice" class="capability-notice" hidden></div><div id="usage-line" class="usage-line" hidden></div>
+            <div id="topic-notes"></div>
+            <div class="manual-card"><div class="section-heading"><div><span class="tiny-icon"><svg class="icon"><use href="#i-review"/></svg></span><h3>我的记录</h3><span class="small-pill">无需 AI</span></div><span id="save-status" class="save-status">已保存</span></div><textarea id="manual-notes" placeholder="随手记下你的理解、问题，或补充课堂上的细节……" aria-label="我的记录"></textarea><div class="manual-bottom"><span>你的记录会自动保存</span><button id="save-notes" class="text-button"><svg class="icon"><use href="#i-save"/></svg>保存记录</button></div></div>
+          </section>
+          <section id="sources-view" class="tab-panel" hidden><div class="section-heading"><div><h3 id="source-preview-title">课件预览</h3><span id="page-total" class="small-pill"></span></div><div class="page-controls"><button id="page-prev" class="icon-button" aria-label="上一页"><svg class="icon rotate"><use href="#i-chevron"/></svg></button><span id="page-position"></span><button id="page-next" class="icon-button" aria-label="下一页"><svg class="icon"><use href="#i-chevron"/></svg></button></div></div><div id="page-origin" class="page-origin" hidden></div><div id="page-preview-warning" class="preview-warning" hidden></div><div id="page-preview" class="page-preview"></div><details id="page-text-details" class="page-text"><summary>查看本页提取文字</summary><p id="page-text"></p></details><div id="page-correction"></div><div class="subtle-notice"><svg class="icon"><use href="#i-info"/></svg>预览可能是原件的转换或文字视图；浏览不会自动确认课件与录音的对应。</div></section>
+          <section id="transcript-view" class="tab-panel" hidden><div class="transcript-heading"><div><h3>录音转写</h3><p id="transcript-origin">点时间回听原音，文字仍需核对。</p></div><label class="small-search"><svg class="icon"><use href="#i-search"/></svg><input id="transcript-search" placeholder="在转写中查找" aria-label="在转写中查找"></label></div><div id="transcript-list"></div></section>
+        </div>
+        <div id="audio-dock" class="audio-dock" hidden><span class="audio-dock-icon"><svg class="icon"><use href="#i-audio"/></svg></span><div class="audio-caption"><strong>原始录音</strong><small id="audio-name"></small></div><audio id="audio-player" controls preload="metadata"></audio></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="drop-overlay" class="drop-overlay" hidden><div><svg class="icon"><use href="#i-plus"/></svg><h2>松手，把资料放进来</h2><p>课件、录音和已有字幕，可以一起导入</p></div></div>
+  <input id="file-input" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.pptx,.docx,.xlsx,.vsdx,.ppt,.doc,.xls,.vsd,.wav,.mp3,.m4a,.srt,.vtt" hidden>
+  <div id="toast" class="toast" role="status" hidden><svg class="icon"><use href="#i-check"/></svg><span></span><button class="icon-button" aria-label="关闭提示"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <dialog id="settings-dialog" class="settings-dialog">
+    <form id="settings-form" novalidate>
+      <div class="dialog-heading"><div><span class="eyebrow">按你的方式整理</span><h2>整理设置</h2></div><button id="settings-close" class="icon-button" type="button" aria-label="关闭设置"><svg class="icon"><use href="#i-close"/></svg></button></div>
+      <p class="dialog-description">识别录音、图片识字和重点归纳分别选择模型。本机模型同样属于 AI；预览、手动记录与归档无需 AI。</p>
+      <div class="capability-tabs" role="tablist" aria-label="整理能力设置"><button type="button" class="capability-tab active" data-setting="text" role="tab" aria-selected="true">重点归纳</button><button type="button" class="capability-tab" data-setting="asr" role="tab" aria-selected="false">语音识别</button><button type="button" class="capability-tab" data-setting="ocr" role="tab" aria-selected="false">图片识字</button></div>
+      <section id="settings-text" class="capability-panel">
+        <div class="capability-heading"><strong>重点归纳</strong><span class="small-pill">需要 AI</span></div><p class="field-description">提取概念、解释和例子，分清录音讲到与课件补充。</p>
+        <label class="form-label" for="settings-provider">连接方式</label><select id="settings-provider"><option value="deepseek">DeepSeek API</option><option value="local_llamacpp">本地模型服务</option></select>
+        <div id="remote-settings"><label class="form-label" for="settings-key">API 密钥 <span id="key-state"></span></label><input id="settings-key" type="password" placeholder="输入你的 API 密钥" autocomplete="off" spellcheck="false"><label class="checkbox-label"><input id="remember-key" type="checkbox">在这台电脑安全保存密钥</label></div>
+        <label class="form-label" for="settings-model">模型</label><div class="input-action"><input id="settings-model" list="model-options" placeholder="模型名称" autocomplete="off"><datalist id="model-options"></datalist><button id="load-models" type="button" class="secondary-button">读取模型</button></div><p id="models-hint" class="field-hint">读取当前连接实际可用的模型。</p>
+        <div id="thinking-settings"><label class="form-label" for="settings-thinking">思考深度</label><select id="settings-thinking"><option value="off">关闭思考 · 更快</option><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="field-hint">更深的思考可能增加耗时和用量。</p></div><p id="local-thinking-hint" class="field-hint" hidden>思考策略由本地服务配置。</p>
+        <details class="advanced-settings"><summary>连接地址</summary><label class="form-label" for="settings-endpoint">API 地址</label><input id="settings-endpoint" type="url" placeholder="https://api.deepseek.com" spellcheck="false"></details>
+      </section>
+      <section id="settings-asr" class="capability-panel" hidden>
+        <div class="capability-heading"><strong>录音转文字</strong><span class="small-pill">需要 AI</span></div><p class="field-description">直接导入录音即可识别；已有 SRT / VTT 会复用，不重复识别。</p>
+        <label class="form-label" for="asr-provider">识别方式</label><select id="asr-provider"><option value="local_whisper">本机识别 · Whisper</option><option value="openai_compatible_asr">语音识别 API</option></select>
+        <div id="asr-local-settings" class="local-model-card"><div class="local-model-heading"><span class="model-mark"><svg class="icon"><use href="#i-audio"/></svg></span><div><strong>Whisper small</strong><span id="asr-model-status">首次使用需准备本机模型</span></div></div><p>模型下载到本机，由软件管理。准备好以后，录音转写可以离线运行。</p><div class="model-actions"><button id="download-model" type="button" class="secondary-button">准备本机语音模型 · 约 486 MB</button><button id="cancel-download" type="button" class="text-button" hidden>停止下载</button></div><progress id="model-download-progress" max="1" value="0" hidden></progress><p id="model-download-message" class="field-hint" aria-live="polite"></p></div>
+        <div id="asr-api-settings" hidden><label class="form-label" for="asr-endpoint">语音 API 地址</label><input id="asr-endpoint" type="url" placeholder="https://你的服务地址/v1" spellcheck="false"><label class="form-label" for="asr-api-model">语音模型名称</label><input id="asr-api-model" placeholder="服务提供的语音识别模型" autocomplete="off"><label class="form-label" for="asr-key">语音 API 密钥 <span id="asr-key-state"></span></label><input id="asr-key" type="password" placeholder="输入语音识别连接的密钥" autocomplete="off" spellcheck="false"><label class="checkbox-label"><input id="asr-remember-key" type="checkbox">在这台电脑安全保存此密钥</label><p class="field-hint">使用支持音频转写协议的服务。录音会发送给你选择的 API；文字归纳连接不会自动获得语音能力。</p></div>
+        <label class="form-label" for="asr-language">录音语言</label><select id="asr-language"><option value="auto">自动识别</option><option value="zh">中文（可含英文术语）</option><option value="en">英文</option></select>
+      </section>
+      <section id="settings-ocr" class="capability-panel" hidden>
+        <div class="capability-heading"><strong>图片与扫描页识字</strong><span class="small-pill">需要 AI</span></div><p class="field-description">仅识别没有原生文字的页面，保留原图。识字结果不代表已经理解图表。</p>
+        <label class="form-label" for="ocr-provider">识字方式</label><select id="ocr-provider"><option value="local_rapidocr">本机识字 · RapidOCR</option><option value="deepseek_vision">DeepSeek 图像识字 API</option></select>
+        <div id="ocr-local-settings" class="local-model-card"><div class="local-model-heading"><span class="model-mark"><svg class="icon"><use href="#i-image"/></svg></span><div><strong>本机识字</strong><span id="ocr-engine-status">检查识字组件中</span></div></div><p>由软件管理识字组件，无需单独创建 Python 环境。已有文字的 PDF 页面直接读取，不重复识别。</p></div>
+        <div id="ocr-api-settings" hidden><label class="form-label" for="ocr-model">图像模型</label><input id="ocr-model" placeholder="deepseek-flash" autocomplete="off"><label class="form-label" for="ocr-endpoint">图像 API 地址</label><input id="ocr-endpoint" type="url" placeholder="https://api.deepseek.com" spellcheck="false"><label class="form-label" for="ocr-key">图像 API 密钥 <span id="ocr-key-state"></span></label><input id="ocr-key" type="password" placeholder="输入图片识字连接的密钥" autocomplete="off" spellcheck="false"><label class="checkbox-label"><input id="ocr-remember-key" type="checkbox">在这台电脑安全保存此密钥</label><p class="field-hint">待识别的页面图片会发送给此 API。按实际用量计费，已完成的识字结果会复用。</p></div>
+      </section>
+      <div id="settings-error" class="form-error" role="alert" hidden></div><div class="dialog-footer"><span><svg class="icon"><use href="#i-shield"/></svg>密钥不会写进笔记或归档</span><button id="settings-save" class="primary-button" type="submit">保存连接</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

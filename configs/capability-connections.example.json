@@ -1,0 +1,7 @@
+{
+  "text_generation": {
+    "id": "deepseek_flash",
+    "location": "remote",
+    "capabilities": ["text_generation"]
+  }
+}

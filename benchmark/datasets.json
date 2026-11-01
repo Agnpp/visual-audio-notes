@@ -1,0 +1,20 @@
+{
+  "mit_functions": {
+    "title": "MIT 6.0001 · 程序分解、抽象与函数",
+    "language": "en",
+    "source_page": "https://ocw.mit.edu/courses/6-0001-introduction-to-computer-science-and-programming-in-python-fall-2016/resources/lecture-4-decomposition-abstraction-and-functions/",
+    "license_page": "https://ocw.mit.edu/pages/privacy-and-terms-of-use/",
+    "credit": "MIT OpenCourseWare, 6.0001 Fall 2016, Lecture 4, Dr. Ana Bell. Source materials: CC BY-NC-SA, subject to MIT OCW terms. Research use; source files are not part of this project's code distribution.",
+    "audio_source_offset_seconds": 0,
+    "selection": "complete lecture; no online subtitles or slide timing supplied to inference"
+  },
+  "ntu_ml": {
+    "title": "台大李宏毅 · 机器学习导论片段",
+    "language": "zh",
+    "source_page": "https://speech.ee.ntu.edu.tw/~tlkagk/courses_MLSD15_2.html",
+    "credit": "Hung-yi Lee, National Taiwan University, Machine Learning and having it deep and structured, 2015. Download links are public on the instructor's course page. A redistribution license was not established in this audit; keep source assets and derived research notes local and do not bundle them in the open-source code release.",
+    "audio_source_offset_seconds": 180,
+    "audio_clip_seconds": 1200,
+    "selection": "fixed 03:00-23:00 excerpt selected before scoring; full PDF remains available as distractors; Chinese narration and English slides"
+  }
+}

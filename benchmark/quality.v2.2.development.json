@@ -1,0 +1,20 @@
+{
+  "version": "quality-v2.2-single-source-development-after-holdout-review",
+  "seed": 20261101,
+  "page_order_prior": false,
+  "chunk_seconds": 40,
+  "semantic_weight": 0.7,
+  "lexical_weight": 0.3,
+  "automatic_score_floor": 0.35,
+  "automatic_margin_floor": 0.04,
+  "top_k": 3,
+  "confirmation_policy": "human_only",
+  "quality_batch_characters": 4500,
+  "quality_sources_per_batch": 1,
+  "quality_local_span_aliases": true,
+  "quality_max_claims_per_batch": 4,
+  "quality_max_tokens": 2200,
+  "quality_evidence_mode": "span_selection",
+  "source_policy": "one source per request; separate origins; selected quotes only",
+  "evaluation_role": "development_on_previously_reviewed_material_not_new_holdout"
+}

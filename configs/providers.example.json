@@ -1,0 +1,16 @@
+{
+  "deepseek_flash": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "endpoint": "https://api.deepseek.com",
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "thinking": "disabled",
+    "timeout_seconds": 600
+  },
+  "existing_local_server": {
+    "provider": "local_llamacpp",
+    "model": "your-configured-local-model",
+    "endpoint": "http://127.0.0.1:38802",
+    "fingerprint": "replace-with-the-local-model-file-sha256"
+  }
+}

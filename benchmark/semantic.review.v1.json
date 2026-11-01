@@ -1,0 +1,9 @@
+{
+  "version": "semantic-review-v1-development",
+  "semantic_review_batch_claims": 8,
+  "semantic_review_max_tokens": 4500,
+  "all_outputs_remain_drafts": true,
+  "evaluation_role": "development_after_holdout_unblinding_not_new_blind_score",
+  "selected_quotes_only": true,
+  "flagged_paraphrases_hidden_from_primary_reader": true
+}

@@ -1,0 +1,10 @@
+{
+  "version": "provider-v3-high-topic-development-comparison",
+  "topic_max_topics_per_origin": 6,
+  "topic_max_tokens": 12000,
+  "topic_missing_policy": "review_queue",
+  "evaluation_role": "development_on_seen_material_not_new_holdout",
+  "extraction_reused_from": "disabled baseline; high applies to topic organization only",
+  "thinking": "enabled",
+  "reasoning_effort": "high"
+}

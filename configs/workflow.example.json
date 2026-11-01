@@ -1,0 +1,8 @@
+{
+  "has_documents": true,
+  "has_audio": true,
+  "has_images": false,
+  "has_native_text": true,
+  "has_transcript": true,
+  "requested_ai": ["grounded_synthesis", "semantic_candidates"]
+}

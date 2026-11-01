@@ -1,0 +1,12 @@
+# Desktop runtime and builder; the full flavor includes CPU recognition engines.
+# Whisper speech weights are managed separately and are not bundled.
+# The API flavor excludes local recognition engines in desktop.spec.
+pywebview>=6,<7
+pyinstaller>=6.16,<7
+pypdfium2>=4,<6
+Pillow>=10,<13
+jsonschema>=4.23,<5
+av>=16,<17
+numpy>=2,<3
+faster-whisper==1.2.1
+rapidocr-onnxruntime==1.4.4

@@ -17,7 +17,7 @@ function Invoke-CheckedNative {
     if ($NativeExitCode -ne 0) { throw ('Native tool failed with exit code ' + $NativeExitCode) }
 }
 $WorkspacePrefix = $ProjectRoot.TrimEnd('\') + '\'
-foreach ($RelativeTarget in @('build\desktop\pyinstaller', 'dist\VisualAudioNotes-0.3.0-windows-x64', 'dist\VisualAudioNotes-0.3.0-api-windows-x64')) {
+foreach ($RelativeTarget in @('build\desktop\pyinstaller', 'dist\VisualAudioNotes-0.3.1-windows-x64', 'dist\VisualAudioNotes-0.3.1-api-windows-x64')) {
     $AbsoluteTarget = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $RelativeTarget))
     if (-not $AbsoluteTarget.StartsWith($WorkspacePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw 'Build target must remain inside the project.'

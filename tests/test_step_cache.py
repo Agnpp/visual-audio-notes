@@ -71,6 +71,34 @@ def test_identical_project_reuses_validated_steps_and_historical_provenance(tmp_
         assert "private_field" not in path.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_deep_windows_cache_paths_keep_reuse_and_diagnostic_accounting(tmp_path, incomplete):
+    cache = tmp_path
+    while len(str(cache.resolve())) < 225:
+        cache = cache / ("nested-cache-" + "x" * 20)
+    assert len(str(cache / ("quality_extract_" + "0" * 64 + ".json.lock"))) > 260
+    first = Model()
+    first.incomplete = incomplete
+    config = {"topic_missing_policy": "review_queue"}
+    ledger, topics = pipeline(cache, first, config=config)
+    assert not ledger["failures"] and len(ledger["ledger"]) == 2
+    assert len(first.calls) == 4
+    second = Model()
+    reused_ledger, reused_topics = pipeline(cache, second, config=config)
+    assert not second.calls
+    assert reused_ledger["ledger"] == ledger["ledger"]
+    assert all(batch["cache_hit"] for batch in reused_ledger["batches"])
+    assert all(batch["reused_incomplete_response"] == incomplete
+               and batch["cache_hit"] != incomplete for batch in reused_topics["batches"])
+    assert reused_topics["deferred_claims"] == topics["deferred_claims"]
+    refreshed = Model()
+    pipeline(cache, refreshed, config={**config, "cache_force_refresh": True})
+    assert len(refreshed.calls) == 4
+    final = Model()
+    _, complete_topics = pipeline(cache, final, config=config)
+    assert not final.calls and all(batch["cache_hit"] for batch in complete_topics["batches"])
+
+
 def test_editing_one_source_recomputes_only_its_extraction_and_origin_topics(tmp_path):
     pipeline(tmp_path, Model())
     model = Model()

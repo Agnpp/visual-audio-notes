@@ -39,6 +39,9 @@ class RangeHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Accept-Ranges", "bytes")
+        # Reusing this loopback port for another archive must not display the
+        # previous archive's cached HTML or previews during QA.
+        self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def copyfile(self, source, outputfile):

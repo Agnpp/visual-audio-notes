@@ -4,11 +4,11 @@
 
 Turn scattered slides, images and an independent recording into notes you can review, replay and archive.
 
-**0.3.0 is a Windows preview, not a 1.0 stable release.** The desktop workflow is implemented; independent-material summary quality, clean Windows installations and ordinary-user trials still need validation. Tests and protocol fixtures are not accuracy scores. See the [1.0 checklist](docs/ROADMAP.md).
+**0.3.1 is a Windows preview, not a 1.0 stable release.** The desktop workflow is implemented; independent-material summary quality, clean Windows installations and ordinary-user trials still need validation. Tests and protocol fixtures are not accuracy scores. See the [1.0 checklist](docs/ROADMAP.md).
 
 ## Download and start
 
-Download a Windows x64 ZIP from [v0.3.0 preview releases](https://github.com/Agnpp/visual-audio-notes/releases/tag/v0.3.0), extract the **entire folder**, and double-click **VisualAudioNotes.exe**. Keep `_internal` next to it. No Python, Node.js or CUDA setup is needed.
+Download a Windows x64 ZIP from [v0.3.1 preview releases](https://github.com/Agnpp/visual-audio-notes/releases/tag/v0.3.1), extract the **entire folder**, and double-click **VisualAudioNotes.exe**. Keep `_internal` next to it. No Python, Node.js or CUDA setup is needed.
 
 | Edition | Recognition setup |
 | --- | --- |

@@ -4,6 +4,8 @@
 
 Status: 2026-11-01. **Workflow completion is not model-quality acceptance.** 0.3.0 adds bilingual use and repository packaging; it is a preview.
 
+0.3.1 completes the previously blocked loopback archive-browser checks and fixes Windows deep AI-cache paths. Direct `file:` automation, clean-device/user trials and model-quality gates below remain separate. / 已补齐本机 HTTP 归档浏览器验证并修复 Windows 深缓存路径；不据此关闭质量或普通用户验收项。
+
 | Original objective / 原定目标 | Implemented / 已做 | Remaining / 未完成 |
 | --- | --- | --- |
 | Import scattered documents and independent audio / 杂乱资料与独立录音 | Mixed PDF/images/modern Office, no-subtitle ASR, OCR, source preservation / 混合导入、转写、OCR、保留原件 | Complex Office fidelity and diagram semantics / 复杂版式、图表语义 |

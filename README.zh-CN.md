@@ -4,11 +4,11 @@
 
 把杂乱的课件、图片与独立录音，整理成可以回看、回听、核对和长期归档的笔记。
 
-**0.3.0 是 Windows 预览版，尚未达到 1.0 正式版标准。** 桌面流程已实现，新材料归纳质量、干净 Windows 和普通用户试用仍待验证。测试通过和协议夹具不代表模型准确率。见 [1.0 验收清单](docs/ROADMAP.md)。
+**0.3.1 是 Windows 预览版，尚未达到 1.0 正式版标准。** 桌面流程已实现，新材料归纳质量、干净 Windows 和普通用户试用仍待验证。测试通过和协议夹具不代表模型准确率。见 [1.0 验收清单](docs/ROADMAP.md)。
 
 ## 下载与使用
 
-从 [v0.3.0 预览版发布页](https://github.com/Agnpp/visual-audio-notes/releases/tag/v0.3.0) 下载 Windows x64 ZIP，**完整解压**，双击 **VisualAudioNotes.exe**。保留旁边的 `_internal` 文件夹，无需安装 Python、Node.js 或 CUDA。
+从 [v0.3.1 预览版发布页](https://github.com/Agnpp/visual-audio-notes/releases/tag/v0.3.1) 下载 Windows x64 ZIP，**完整解压**，双击 **VisualAudioNotes.exe**。保留旁边的 `_internal` 文件夹，无需安装 Python、Node.js 或 CUDA。
 
 | 版本 | 识别设置 |
 | --- | --- |

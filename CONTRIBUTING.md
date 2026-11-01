@@ -25,3 +25,5 @@ Before contributing, preserve these invariants / 开发时保留以下约束：
 - Verify changed workflows with meaningful tests, then final source-matching artifacts and UI checks. Do not claim quality from JSON/schema tests. / 验证实际流程，不拿格式通过代替质量。
 
 Never commit credentials, workspace data, model weights, downloaded third-party materials or personal logs. Reproduction reports should use redacted or self-authored examples. / 不提交密钥、工作区、权重、第三方原件和个人日志。
+
+For optional archive browser QA, use the managed foreground preview described in [preview diagnostics](docs/PREVIEW_DIAGNOSTICS.md). Keep the served directory limited to one exported archive and stop its listener afterward. / 归档浏览器验证使用前台预览，只提供单个归档目录，结束后停止服务。

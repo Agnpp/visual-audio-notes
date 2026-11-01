@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visual-audio-notes"
-version = "0.3.0"
+version = "0.3.1"
 description = "Desktop workspace for evidence-grounded audio and document notes"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"

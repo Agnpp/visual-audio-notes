@@ -69,6 +69,19 @@ def _positive_seconds(value, label, maximum):
         raise ValueError(label + " is outside the permitted range")
 
 
+def _filesystem_path(path: Path) -> Path:
+    # Use Win32 extended paths for internal I/O, including the longer .lock
+    # sibling. This keeps cache identity/location unchanged and needs no global
+    # Windows long-path setting or privilege change.
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if not absolute.startswith("\\\\?\\"):
+        absolute = ("\\\\?\\UNC\\" + absolute[2:] if absolute.startswith("\\\\")
+                    else "\\\\?\\" + absolute)
+    return Path(absolute)
+
+
 @contextmanager
 def _key_lock(path: Path, timeout: float):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,6 +202,9 @@ def resolve_step(path: Path, key: str, invoke: Callable[[], dict],
     _positive_seconds(lock_timeout_seconds, "Cache lock timeout", 3600)
     if type(force_refresh) is not bool:
         raise ValueError("cache_force_refresh must be boolean")
+    path = _filesystem_path(path)
+    if diagnostic_path is not None:
+        diagnostic_path = _filesystem_path(diagnostic_path)
     with _key_lock(path.with_suffix(path.suffix + ".lock"), lock_timeout_seconds):
         result, reason = (None, "force_refresh") if force_refresh else _read(
             path, key, validate, max_age_seconds, complete=True)

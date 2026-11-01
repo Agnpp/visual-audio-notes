@@ -42,8 +42,16 @@ class MemoryWatch:
 
 def software() -> dict:
     names = ["faster-whisper", "av", "pypdfium2", "sentence-transformers", "scikit-learn", "torch"]
+    versions = {}
+    for name in names:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            # Recording a frozen prediction does not require unused research
+            # model libraries. Missing is explicit, never a fabricated version.
+            versions[name] = None
     return {"python": platform.python_version(), "platform": platform.platform(),
-            "packages": {name: importlib.metadata.version(name) for name in names}}
+            "packages": versions}
 
 
 def freeze(out: Path, config_path: Path, feature_path: Path) -> None:

@@ -89,6 +89,26 @@ def test_resource_cannot_escape_archive(tmp_path, relative):
         safe_member(tmp_path, relative)
 
 
+def test_freeze_records_uninstalled_optional_model_libraries_without_requiring_them(tmp_path, monkeypatch):
+    from visual_audio_notes import cli
+    original = cli.importlib.metadata.version
+    def available(name):
+        if name in {'sentence-transformers', 'torch'}:
+            raise cli.importlib.metadata.PackageNotFoundError(name)
+        return original(name)
+    monkeypatch.setattr(cli.importlib.metadata, 'version', available)
+    config, features, run = tmp_path/'protocol.json', tmp_path/'features.json', tmp_path/'run'
+    run.mkdir()
+    write_json(config, {'version':'optional-library-fixture'})
+    write_json(features, {'units':[], 'segments':[]})
+    write_json(run/'predictions.json', {'predictions':['preserved']})
+    freeze(run, config, features)
+    result=verify_freeze(run)
+    assert result['software']['packages']['torch'] is None
+    assert result['software']['packages']['sentence-transformers'] is None
+    assert result['software']['packages']['pypdfium2']
+
+
 def test_frozen_prediction_tampering_is_detected(tmp_path):
     config = tmp_path / "protocol.json"
     features = tmp_path / "features.json"

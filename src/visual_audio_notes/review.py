@@ -20,6 +20,11 @@ POLICY = "Explicit human action only; retrieval scores are not correctness proba
 PROVENANCE = "explicit_human_decision"
 
 
+class StaleReviewError(ValueError):
+    def __init__(self):
+        super().__init__("资料或核对记录已更新，请重新查看后确认。")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -93,7 +98,7 @@ def validate_review(state: dict) -> None:
                    "unit_ids", "segment_ids", "items", "history"}
     if not isinstance(state, dict) or set(state) != root_fields:
         raise ValueError("Invalid review document schema")
-    if (type(state["schema_version"]) is not int or state["schema_version"] != 1 or
+    if (type(state["schema_version"]) is not int or state["schema_version"] not in {1, 2} or
             state["policy"] != POLICY or not _fingerprint(state["source_fingerprint"]) or
             type(state["source_revision"]) is not int or state["source_revision"] < 0):
         raise ValueError("Invalid review source identity or policy")
@@ -103,6 +108,7 @@ def validate_review(state: dict) -> None:
     if allowed & expected or not isinstance(state["items"], list) or not isinstance(state["history"], list):
         raise ValueError("Invalid review collections")
     latest = {}
+    source_change = None
     for event in state["history"]:
         if not isinstance(event, dict) or not _utc(event.get("at_utc")):
             raise ValueError("Invalid review history")
@@ -116,17 +122,39 @@ def validate_review(state: dict) -> None:
                     (event["review"]["decision"] == "match") != bool(event["unit_ids"]) or
                     event["review"]["source_revision"] > state["source_revision"]):
                 raise ValueError("Invalid decision provenance")
-            if event["review"]["source_revision"] == state["source_revision"]:
+            revision = event["review"]["source_revision"]
+            fingerprint = event["review"]["source_fingerprint"]
+            if revision == state["source_revision"]:
                 if (event["segment_id"] not in expected or set(event["unit_ids"]) - allowed or
-                        event["review"]["source_fingerprint"] != state["source_fingerprint"]):
+                        fingerprint != state["source_fingerprint"]):
                     raise ValueError("Decision does not belong to the current sources")
-                latest[event["segment_id"]] = event
+            latest[revision, event["segment_id"]] = (event, fingerprint)
         elif event.get("event") == "inputs_changed":
             if set(event) != {"event", "at_utc", "old_fingerprint", "new_fingerprint", "invalidated_decisions"}:
                 raise ValueError("Invalid source-change event")
             if (not _fingerprint(event["old_fingerprint"]) or not _fingerprint(event["new_fingerprint"]) or
                     type(event["invalidated_decisions"]) is not int or event["invalidated_decisions"] < 0):
                 raise ValueError("Invalid source-change provenance")
+            source_change = event
+        elif event.get("event") == "decision_carried":
+            if state["schema_version"] != 2 or set(event) != {
+                    "event", "at_utc", "segment_id", "source_revision", "source_fingerprint"}:
+                raise ValueError("Invalid carried-decision event")
+            identifier, revision, fingerprint = event["segment_id"], event["source_revision"], event["source_fingerprint"]
+            if (not isinstance(identifier, str) or type(revision) is not int
+                    or not 0 < revision <= state["source_revision"] or not _fingerprint(fingerprint)
+                    or not source_change or fingerprint != source_change["new_fingerprint"]
+                    or (revision, identifier) in latest):
+                raise ValueError("Invalid carried-decision source identity")
+            previous = latest.get((revision - 1, identifier))
+            if (not previous or previous[1] != source_change["old_fingerprint"]
+                    or previous[0]["review"]["decision"] not in {"match", "no_match"}):
+                raise ValueError("A carried decision needs a prior explicit confirmation")
+            if revision == state["source_revision"] and (
+                    identifier not in expected or set(previous[0]["unit_ids"]) - allowed
+                    or fingerprint != state["source_fingerprint"]):
+                raise ValueError("Carried decision does not belong to the current sources")
+            latest[revision, identifier] = (previous[0], fingerprint)
         else:
             raise ValueError("Unknown review history event")
     seen = set()
@@ -155,7 +183,7 @@ def validate_review(state: dict) -> None:
         if (not _ids(item["confirmed_unit_ids"]) or set(item["confirmed_unit_ids"]) - allowed or
                 type(item["revision"]) is not int or item["revision"] < 0):
             raise ValueError("Invalid confirmed selection")
-        event = latest.get(identifier)
+        event, _ = latest.get((state["source_revision"], identifier), (None, None))
         if item["review"] is None:
             if item["status"] != "needs_review" or item["confirmed_unit_ids"] or item["revision"] or event:
                 raise ValueError("A candidate cannot be confirmed without an explicit review")
@@ -164,8 +192,6 @@ def validate_review(state: dict) -> None:
             review = item["review"]
             expected_status = {"match": "confirmed", "no_match": "confirmed_unmatched", "defer": "needs_review"}
             if (item["status"] != expected_status[review["decision"]] or
-                    review["source_fingerprint"] != state["source_fingerprint"] or
-                    review["source_revision"] != state["source_revision"] or
                     (review["decision"] == "match") != bool(item["confirmed_unit_ids"])):
                 raise ValueError("Review decision and displayed status disagree")
             if (not event or event["review"] != review or event["unit_ids"] != item["confirmed_unit_ids"]
@@ -214,8 +240,9 @@ def apply_decision(state: dict, segment_id: str, unit_ids: list[str], *, reviewe
     return result
 
 
-def refresh_review(state: dict, predictions: list[dict], units: list[Unit], chunks: list[Chunk]) -> dict:
-    """Keep actual decisions when only ranking changes; invalidate on input changes."""
+def refresh_review(state: dict, predictions: list[dict], units: list[Unit], chunks: list[Chunk],
+                   *, previous_sources: tuple[list[Unit], list[Chunk]] | None = None) -> dict:
+    """Carry decisions only when their relevant sources can be verified unchanged."""
     validate_review(state)
     fresh = create_review(predictions, units, chunks)
     if fresh["source_fingerprint"] == state["source_fingerprint"]:
@@ -225,14 +252,44 @@ def refresh_review(state: dict, predictions: list[dict], units: list[Unit], chun
             item["candidates"] = candidates[item["segment_id"]]
     else:
         result = fresh
+        result["schema_version"] = state["schema_version"]
         result["source_revision"] = state["source_revision"] + 1
-        result["history"] = deepcopy(state["history"]) + [{
+        transition = {
             "event": "inputs_changed", "at_utc": _now(),
             "old_fingerprint": state["source_fingerprint"], "new_fingerprint": fresh["source_fingerprint"],
             "invalidated_decisions": sum(i["review"] is not None for i in state["items"]),
-        }]
+        }
+        result["history"] = deepcopy(state["history"]) + [transition]
+        if previous_sources is not None and source_fingerprint(*previous_sources) == state["source_fingerprint"]:
+            _carry_decisions(state, result, previous_sources, units, chunks, transition)
     validate_review(result)
     return result
+
+
+def _carry_decisions(state, result, previous_sources, units, chunks, transition):
+    old_units, old_chunks = previous_sources
+    before_pages = {unit.unit_id: unit for unit in old_units}
+    after_pages = {unit.unit_id: unit for unit in units}
+    unchanged_pages = {uid for uid, unit in after_pages.items() if before_pages.get(uid) == unit}
+    before_cues = {chunk.segment_id: chunk for chunk in old_chunks}
+    unchanged_cues = {chunk.segment_id for chunk in chunks if before_cues.get(chunk.segment_id) == chunk}
+    old_items = {item["segment_id"]: item for item in state["items"] if item["review"] is not None}
+    for item in result["items"]:
+        identifier = item["segment_id"]
+        old = old_items.get(identifier)
+        if old is None or identifier not in unchanged_cues:
+            continue
+        decision = old["review"]["decision"]
+        if not ((decision == "match" and set(old["confirmed_unit_ids"]) <= unchanged_pages)
+                or (decision == "no_match" and before_pages == after_pages)):
+            continue
+        for key in ("status", "confirmed_unit_ids", "review", "revision"):
+            item[key] = deepcopy(old[key])
+        result["schema_version"] = 2
+        result["history"].append({"event": "decision_carried", "at_utc": transition["at_utc"],
+                                  "segment_id": identifier, "source_revision": result["source_revision"],
+                                  "source_fingerprint": result["source_fingerprint"]})
+        transition["invalidated_decisions"] -= 1
 
 
 def save_review(path: Path, state: dict) -> None:

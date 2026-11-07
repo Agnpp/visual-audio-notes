@@ -118,6 +118,22 @@ def test_confirming_again_after_sources_change_uses_current_revision(materials):
     assert new["items"][0]["status"] == "confirmed"
 
 
+def test_unchanged_matches_can_cross_revisions_and_new_pages_invalidate_no_match(materials):
+    units, chunks, predictions = materials
+    original = confirm(create_review(predictions, units, chunks))
+    original = apply_decision(original, "t_two", [], reviewer="reader",
+                              expected_fingerprint=original["source_fingerprint"], decision="no_match")
+    expanded = [*units, Unit("u_new", "Additional material.")]
+    first = refresh_review(original, predictions, expanded, chunks, previous_sources=(units, chunks))
+    assert [item["status"] for item in first["items"]] == ["confirmed", "needs_review"]
+    assert first["items"][0]["review"] == original["items"][0]["review"]
+    second = refresh_review(first, predictions, units, chunks, previous_sources=(expanded, chunks))
+    assert [item["status"] for item in second["items"]] == ["confirmed", "needs_review"]
+    assert second["items"][0]["review"] == original["items"][0]["review"]
+    # An invalidated no-match is not restored just because the same inputs return.
+    assert second["source_revision"] == 2
+
+
 @pytest.mark.parametrize("selection,decision", [
     (["unknown"], "match"), (["u_first", "u_first"], "match"),
     ([], "match"), (["u_first"], "no_match"), (["u_first"], "defer"),

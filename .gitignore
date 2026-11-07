@@ -14,6 +14,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+/api.txt
 .playwright-cli/
 output/
 .ruff_cache/

@@ -119,13 +119,13 @@ def _key(config):
     return value
 
 
-def _segments(values, duration=None, offset=0):
+def _segments(values, duration=None, offset=0, *, unlocated_local=None):
     if duration is not None and (type(duration) not in (int, float) or not math.isfinite(duration) or duration <= 0):
         raise RecognitionError("录音时长无效，不能核对识别时间。")
     if not isinstance(values, list):
         raise RecognitionError("语音服务没有返回带起止时间的分段；不能伪造录音时间。")
     result, previous = [], -1
-    for value in values:
+    for index, value in enumerate(values):
         try:
             if not isinstance(value, dict) or not isinstance(value.get("text"), str):
                 raise ValueError()
@@ -143,8 +143,20 @@ def _segments(values, duration=None, offset=0):
                               offset + float(start), offset + float(end), text)
             result.append(asdict(segment))
         except (KeyError, TypeError, ValueError):
-            raise RecognitionError("语音服务的分段时间无效，未采用此结果。") from None
+            if unlocated_local is None:
+                raise RecognitionError("语音服务的分段时间无效，未采用此结果。") from None
+            # Local Whisper can emit a bad timestamp at a VAD or file boundary.
+            # Retain its text for review without attaching an invented time.
+            row = value if isinstance(value, dict) else {}
+            unlocated_local.append({"row": index, "reason": "invalid_local_asr_time",
+                                    "text": row.get("text") if isinstance(row.get("text"), str) else "",
+                                    "reported_start": _reported_time(row.get("start")),
+                                    "reported_end": _reported_time(row.get("end"))})
     return result
+
+
+def _reported_time(value):
+    return value if type(value) in (int, float) and math.isfinite(value) else None
 
 
 def _cached(path, identity, source_hash):
@@ -256,7 +268,9 @@ def _local_asr(audio, config, progress, cancel_event=None):
             _cancel(cancel_event)
             raw.append({"start": segment.start, "end": segment.end, "text": segment.text})
             _notify(progress, f"正在识别录音，已处理 {segment.end / 60:.1f} 分钟…", min(1., segment.end / duration) if duration else None)
-        return {"segments": _segments(raw, duration), "duration_seconds": duration,
+        unlocated = []
+        segments = _segments(raw, duration, unlocated_local=unlocated)
+        return {"segments": segments, "duration_seconds": duration, "unlocated_segments": unlocated,
                 "language": info.language, "api_calls": [], "no_speech": not bool(raw)}
     except (RecognitionError, RecognitionCancelled):
         raise

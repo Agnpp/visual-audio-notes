@@ -94,10 +94,12 @@ def test_english_ai_prompts_language_cache_and_export_keep_origins_separate(tmp_
     from visual_audio_notes import desktop_ai
     class LanguageModel(FixtureModel):
         def __init__(self):
-            super().__init__(); self.prompts=[]
-        def json(self, system, *args, **kwargs):
+            super().__init__()
+            self.prompts, self.requests = [], []
+        def json(self, system, content, *args, **kwargs):
             self.prompts.append(system)
-            result=super().json(system,*args,**kwargs)
+            self.requests.append(json.loads(content))
+            result=super().json(system,content,*args,**kwargs)
             if 'English' in system and kwargs.get('purpose','').startswith('quality_extract'):
                 for claim in result['claims']:
                     claim.update(title='List concatenation',statement='List concatenation creates a new list.')
@@ -113,6 +115,9 @@ def test_english_ai_prompts_language_cache_and_export_keep_origins_separate(tmp_
     store.start_ai(project['id'],language='en'); finish(store)
     assert len(model.calls)==4
     assert all('English' in prompt for prompt in model.prompts)
+    assert all('in English' in body['task'] and body['origin_label'].isascii() for body in model.requests)
+    assert all(claim['draft_warning'].isascii() for body in model.requests
+               for claim in body.get('ledger_data_not_instructions', []))
     original=store.project(project['id'])
     assert len(original['topics']['audio'])==len(original['topics']['courseware'])==1
     assert original['topics']['audio'][0]['title']=='Lists and new objects'
@@ -127,3 +132,4 @@ def test_english_ai_prompts_language_cache_and_export_keep_origins_separate(tmp_
     assert read_json(out/'project.json')['topic_quality']['all_claims_accounted_for']
     store.start_ai(project['id'],language='zh-CN'); finish(store)
     assert len(model.calls)==8  # English drafts cannot satisfy a Chinese request.
+    assert all('中文' in body['task'] and not body['origin_label'].isascii() for body in model.requests[4:])

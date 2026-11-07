@@ -108,6 +108,11 @@ def export_english_reader(project: Path, out: Path):
     for item in retained:
         links.append('<li><a href="' + escaped(quote(item["path"], safe="/"), quote=True) + '">' + escaped(item["filename"]) + "</a></li>")
         markdown.extend(["- [" + markdown_text(item["filename"]) + "](" + quote(item["path"], safe="/") + ")"])
+    recognition_file = out / "识别记录.json"
+    if recognition_file.is_file():
+        recognition_href = quote(recognition_file.name)
+        links.append(f'<li><a href="{recognition_href}">Recognition record</a></li>')
+        markdown.append(f"- [Recognition record]({recognition_href})")
     cards.append('<details class="extra"><summary>Original files and machine-readable records</summary><ul>' + "".join(links) + '</ul><p>Recognition results, corrections, original and revised transcripts, source hashes and usage records are retained alongside this reader.</p></details>')
     if content["units"]:
         cards.append('<details class="extra"><summary>Extracted and corrected document text</summary>')

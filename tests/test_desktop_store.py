@@ -303,3 +303,66 @@ def test_no_ai_manual_confirmation_survives_adding_ai_organization(tmp_path, inp
     store.start_ai(project["id"])
     finish(store)
     assert store.project(project["id"])["review_items"][0]["status"] == "confirmed"
+
+
+def test_review_after_failed_first_run_is_exported_and_survives_early_retry_failure(tmp_path, inputs, monkeypatch):
+    from visual_audio_notes import desktop_ai
+
+    class FailingModel(FixtureModel):
+        def json(self, *args, **kwargs):
+            raise ValueError("Fixture request failed")
+
+    def fail_before_candidates(connection):
+        raise ValueError("Fixture connection setup failed")
+
+    monkeypatch.setattr(desktop_ai, "create_json_model", lambda connection: FailingModel())
+    store = DesktopStore(tmp_path / "workspace")
+    store.save_connection({"api_key": "fixture-not-real"})
+    project = store.import_files(list(inputs))
+    identifier = project["id"]
+    store.start_ai(identifier)
+    store._thread.join(timeout=10)
+    assert store.state()["job"]["state"] == "failed"
+    failed = store.project(identifier)
+    segment_id = failed["chunks"][0]["segment_id"]
+    page_id = failed["pages"][0]["unit_id"]
+    reviewed = store.decide(identifier, segment_id, [page_id])
+    assert reviewed["review_items"][0]["status"] == "confirmed"
+
+    first_export = store.export_project(identifier, tmp_path / "from-first-failure")
+    assert first_export["checks"]["human_confirmed_single_page_mappings"] == 1
+    monkeypatch.setattr(desktop_ai, "create_json_model", fail_before_candidates)
+    store.start_ai(identifier)
+    store._thread.join(timeout=10)
+    assert store.state()["job"]["state"] == "failed"
+
+    reopened = DesktopStore(store.root)
+    assert reopened.project(identifier)["review_items"] == reviewed["review_items"]
+    monkeypatch.setattr(desktop_ai, "create_json_model", lambda connection: FixtureModel())
+    reopened.save_connection({"api_key": "fixture-not-real"})
+    reopened.start_ai(identifier)
+    finish(reopened)
+    assert reopened.project(identifier)["review_items"][0]["confirmed_unit_ids"] == [page_id]
+
+
+def test_archive_write_failure_leaves_destination_available_for_retry(tmp_path, inputs, monkeypatch):
+    from visual_audio_notes import desktop_ai
+
+    def partial_write(project, destination, *, language):
+        destination.mkdir()
+        (destination / "unfinished.txt").write_text("partial", encoding="utf-8")
+        raise PermissionError("Fixture write failure")
+
+    store = DesktopStore(tmp_path / "workspace")
+    project = store.import_files(list(inputs))
+    identifier = project["id"]
+    destination = tmp_path / "exports" / "archive"
+    with monkeypatch.context() as patch:
+        patch.setattr(desktop_ai, "export_project", partial_write)
+        with pytest.raises(PermissionError):
+            store.export_project(identifier, destination, language="en")
+
+    assert list(destination.parent.iterdir()) == []
+    assert store.project(identifier)["export_path"] is None
+    result = store.export_project(identifier, destination, language="en")
+    assert (destination / result["reader_entry"]).is_file()

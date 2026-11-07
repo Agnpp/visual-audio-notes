@@ -13,6 +13,7 @@ import urllib.parse
 
 from .binding import validate_binding
 from .core import Chunk, chunks_from_segments, file_hash, load_features, read_json
+from .desktop_prepare import active_review_path
 from .providers import create_json_model
 from .quality import synthesize_grounded
 from .review import create_review, load_review, refresh_review, save_review, source_fingerprint
@@ -51,9 +52,8 @@ def run_ai(project: Path, resources: Path, run_id: str, connection, refresh: boo
         runtime.stage("candidates", "running")
         progress("candidates", "正在按内容查找课件候选，不使用翻页时间…")
         candidates = rank_candidates(units, chunks)
-        previous = (project / "runs" / meta["completed_run"] / "candidate_review.json" if meta.get("completed_run")
-                    else prepared / "review.json")
-        review = refresh_review(load_review(previous), candidates, units, chunks) if previous and previous.is_file() else create_review(candidates, units, chunks)
+        previous = active_review_path(project, meta)
+        review = refresh_review(load_review(previous), candidates, units, chunks) if previous.is_file() else create_review(candidates, units, chunks)
         save_review(run / "candidate_review.json", review)
         runtime.stage("candidates", "complete")
         runtime.stage("evidence", "running")
@@ -107,9 +107,9 @@ def _append_manual(out, text):
     reader.write_text(content.replace("</body>", extra + "</body>"), encoding="utf-8")
 
 
-def _apply_basic_review(out, project, prepared, *, uses_ai=False):
+def _apply_basic_review(out, project, meta, prepared, *, uses_ai=False):
     from .archive import validate_archive
-    path = prepared / "review.json"
+    path = active_review_path(project, meta)
     if not path.is_file():
         return
     units, segments = load_features(prepared / "features.json")
@@ -244,7 +244,7 @@ def _export_recognized(project, out, meta, prepared, audio, pdf):
     notes = {"overview": notice, "topics": [], "review_questions": [],
              "uncertainties": ["自动识别的文字仍需核对；浏览或播放不自动确认课件对应关系。"]}
     export_archive(out, meta["title"], audio, pdf, prepared, read_json(prepared / "source_map.json"),
-                   chunks, predictions, notes, "使用者导入的原件；识别结果不是人工校对稿。")
+                   chunks, predictions, notes, "使用者导入的原件；识别结果不是人工校对稿。", browse_pages=True)
     document = (out / "阅读.html").read_text(encoding="utf-8")
     document = document.replace("重点由本地模型整理。点击来源核对原页或录音；自动页面对应关系仍需复核。", notice)
     (out / "阅读.html").write_text(document, encoding="utf-8")
@@ -254,7 +254,7 @@ def _export_recognized(project, out, meta, prepared, audio, pdf):
                     model_call_scope="识别记录中分别保留本机模型步骤与远程 API 尝试，未从缺失统计推断零用量")
     atomic_json(out / "project.json", manifest)
     _append_manual(out, meta["manual_notes"])
-    checked = _apply_basic_review(out, project, prepared, uses_ai=uses_ai) or validate_archive(out)
+    checked = _apply_basic_review(out, project, meta, prepared, uses_ai=uses_ai) or validate_archive(out)
     _append_derived(out, project, meta)
     checked.update(mode=mode, uses_ai=uses_ai)
     atomic_json(out / "archive_checks.json", checked)
@@ -310,7 +310,7 @@ def _export_project(project: Path, out: Path):
             return _export_recognized(project, out, meta, prepared, audio, pdf)
         from .basic_output import export_basic_archive
         checked = export_basic_archive(out, meta["title"], audio, pdf, prepared, meta["manual_notes"])
-        checked = _apply_basic_review(out, project, prepared) or checked
+        checked = _apply_basic_review(out, project, meta, prepared) or checked
         _append_derived(out, project, meta)
         return {"mode": "basic_no_ai", "checks": checked}
     # Incomplete inputs still have a useful portable archive. No transcript or

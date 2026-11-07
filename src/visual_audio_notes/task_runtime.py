@@ -24,6 +24,10 @@ class TaskBudgetExceeded(RuntimeError):
 class TaskRequestFailed(RuntimeError):
     """Stop the product task after a failed request, without paid repair loops."""
 
+    def __init__(self, message, *, response_error=None):
+        super().__init__(message)
+        self.response_error = response_error
+
 
 class TaskCancelled(RuntimeError):
     """Cooperative stop before the next model call; active calls may be billed."""
@@ -52,7 +56,7 @@ def _limit(value, name, maximum):
 def _call_metadata(call: dict) -> dict:
     result = {key: call[key] for key in
               ("purpose", "status", "request_sha256", "requested_model", "actual_model",
-               "response_id", "finish_reason", "http_status", "seconds", "system_prefix_sha256")
+               "response_id", "finish_reason", "response_error", "reasoning_tokens", "http_status", "seconds", "system_prefix_sha256")
               if isinstance(call.get(key), (str, int, float)) and not isinstance(call.get(key), bool)}
     result["usage"] = {key: value for key, value in call.get("usage", {}).items()
                        if key in {"prompt_tokens", "completion_tokens", "total_tokens",
@@ -174,7 +178,10 @@ class TaskModel:
         except BaseException as error:
             call["status"] = "failed_usage_unknown"
             if self.stop_on_request_error and isinstance(error, Exception):
-                raise TaskRequestFailed("Model request failed; task stopped and completed steps were preserved. See task usage/status.") from None
+                observed = self.model.calls[before:]
+                response_error = observed[-1].get("response_error") if observed else None
+                raise TaskRequestFailed("Model request failed; task stopped and completed steps were preserved. See task usage/status.",
+                                        response_error=response_error) from None
             raise
         finally:
             observed = self.model.calls[before:]

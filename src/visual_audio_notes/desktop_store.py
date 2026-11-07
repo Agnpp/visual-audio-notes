@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+from tempfile import TemporaryDirectory
 import threading
 import urllib.parse
 import uuid
@@ -23,11 +24,12 @@ from .basic import parse_transcript, prepare_basic
 from .binding import create_binding, save_binding, validate_binding
 from .core import Chunk, Segment, Unit, chunks_from_segments, file_hash, load_features, read_json
 from .desktop_credentials import load_secret, save_secret
+from .desktop_prepare import active_review_path, refresh_candidates
 from .desktop_recognition import RecognitionSettings
 from .ingest import extract_pdf
 from .providers import ModelConnection, create_json_model
-from .review import apply_decision, create_review, load_review, save_review, source_fingerprint
-from .task_runtime import TaskBudgetExceeded, TaskCancelled, TaskModel, atomic_json, usage_report
+from .review import StaleReviewError, apply_decision, create_review, load_review, save_review, source_fingerprint
+from .task_runtime import TaskBudgetExceeded, TaskCancelled, TaskModel, TaskRequestFailed, atomic_json, usage_report
 
 
 _ENV_LOCK = threading.RLock()
@@ -42,11 +44,19 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _review_version(meta, review):
+    return f'{meta.get("preparation_revision", 0)}:{review["source_revision"]}:{review["source_fingerprint"]}'
+
+
 def _safe_error(error):
     if isinstance(error, TaskCancelled):
         return "已停止整理，原件和已完成步骤已保留，可以继续。"
     if isinstance(error, TaskBudgetExceeded):
         return "已达到本轮调用上限，已完成的步骤已保存，可以继续整理。"
+    if isinstance(error, TaskRequestFailed) and error.response_error:
+        if error.response_error == "output_limit":
+            return "模型输出达到上限。已保存完成的步骤，可分批整理或调整模型设置后再试。"
+        return "模型未返回可用的归纳结果。已保存完成的步骤，可检查模型设置后再试。"
     from .recognition import RecognitionError
     if isinstance(error, RecognitionError):
         return str(error)
@@ -385,7 +395,7 @@ class DesktopStore:
             missing.append("text_generation")
         topics = {"audio": [], "courseware": []}
         usage = None
-        review_items, chunks = [], []
+        review_items, chunks, review_version = [], [], None
         run = path / "runs" / meta["latest_run"] if meta["latest_run"] else None
         completed = path / "runs" / meta["completed_run"] if meta.get("completed_run") else None
         topics_run = completed or run
@@ -399,12 +409,12 @@ class DesktopStore:
             preparation_usage = read_json(preparation_report).get("usage", {})
             usage = {**(usage or {}), "recognition": preparation_usage,
                      "total_api_attempts": (usage or {}).get("api_attempts", 0) + preparation_usage.get("api_attempts", 0)}
-        if topics_run and (topics_run / "candidate_review.json").is_file():
-            review_items = load_review(topics_run / "candidate_review.json")["items"]
-            chunks = read_json(topics_run / "chunks.json")["chunks"]
-        elif (path / "prepared/review.json").is_file():
-            review_items = load_review(path / "prepared/review.json")["items"]
-            chunks = read_json(path / "prepared/chunks.json")["chunks"]
+        review_path = active_review_path(path, meta)
+        if review_path.is_file():
+            review = load_review(review_path)
+            review_items = review["items"]
+            chunks = read_json(review_path.parent / "chunks.json")["chunks"]
+            review_version = _review_version(meta, review)
         recognition = self.recognition.public()
         needs_asr = "speech_to_text" in missing
         needs_ocr = "ocr" in missing
@@ -432,7 +442,7 @@ class DesktopStore:
                 "archived_at": meta.get("archived_at"), "has_ai": any(topics.values()),
                 "export_path": meta.get("export_path"),
                 "topics_from_previous_run": bool(completed and meta.get("completed_run") != meta.get("latest_run")),
-                "review_items": review_items, "chunks": chunks}
+                "review_items": review_items, "review_version": review_version, "chunks": chunks}
 
     def save_notes(self, identifier, text):
         if not isinstance(text, str) or len(text) > 1000000:
@@ -488,6 +498,12 @@ class DesktopStore:
                 raise ValueError("重新生成选项无效。")
             path = self._path(identifier)
             meta = read_json(path / "project.json")
+            previous_review = active_review_path(path, meta)
+            prepared = path / "prepared"
+            if not meta.get("completed_run") and previous_review.parent != prepared:
+                # A failed first run can still contain human decisions. Keep
+                # them reachable if a retry stops before producing candidates.
+                refresh_candidates(prepared, previous_review)
             run_id = "r_" + uuid.uuid4().hex[:24]
             self._cancel.clear()
             meta.update(status="running", latest_run=run_id)
@@ -566,20 +582,28 @@ class DesktopStore:
             self._job.update(state=state, stage=state, message=message)
             self._save_job()
 
-    def decide(self, identifier, segment_id, unit_ids, decision="match"):
+    def decide(self, identifier, segment_id, unit_ids, decision="match", *,
+               expected_version=None, expected_revision=None):
         with self._lock:
+            if self._job and self._job["project_id"] == identifier and self._job["state"] == "running":
+                raise StaleReviewError()
             path = self._path(identifier)
             meta = read_json(path / "project.json")
-            active = meta.get("completed_run") or meta["latest_run"]
-            run_review = path / "runs" / active / "candidate_review.json" if active else None
-            review_path = run_review if run_review and run_review.is_file() else path / "prepared/review.json"
+            review_path = active_review_path(path, meta)
             if not review_path.is_file():
+                if expected_version is not None:
+                    raise StaleReviewError()
                 raise ValueError("手动对应需要课件和已有转写；无需配置 AI。")
             features = read_json(path / "prepared/features.json")
             chunks_path = review_path.parent / "chunks.json"
             fingerprint = source_fingerprint([Unit.from_wire(u) for u in features["units"]],
                 [Chunk(**chunk) for chunk in read_json(chunks_path)["chunks"]])
             review = load_review(review_path, expected_fingerprint=fingerprint)
+            if expected_version is not None:
+                item = next((item for item in review["items"] if item["segment_id"] == segment_id), None)
+                if (expected_version != _review_version(meta, review) or item is None
+                        or expected_revision != item["revision"]):
+                    raise StaleReviewError()
             reviewed = apply_decision(review, segment_id, unit_ids, decision=decision,
                 reviewer="desktop-user", expected_fingerprint=review["source_fingerprint"])
             save_review(review_path, reviewed)
@@ -596,7 +620,13 @@ class DesktopStore:
             destination = Path(destination).resolve()
             if destination.exists() or destination.is_relative_to(path) or path.is_relative_to(destination):
                 raise ValueError("请选择一个新的归档文件夹，不能覆盖原资料或已有文件夹。")
-            result = export_project(path, destination, language=language)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with TemporaryDirectory(prefix=".van-", dir=destination.parent) as temporary:
+                staging = Path(temporary) / "archive"
+                result = export_project(path, staging, language=language)
+                if destination.exists():
+                    raise ValueError("请选择一个新的归档文件夹，不能覆盖原资料或已有文件夹。")
+                staging.rename(destination)
             meta = read_json(path / "project.json")
             meta["archived_at"] = _now()
             meta["export_path"] = str(destination)

@@ -17,14 +17,14 @@ The settings dialog has three independent capability tabs:
 
 - **Speech recognition:** Full edition includes a local Whisper engine. Click **Prepare local speech model** to download about **486 MB**, with progress, checksum validation, resume and Stop. Nothing downloads just because the app starts. Then local transcription can run offline. Alternatively supply your compatible speech API endpoint, model name and key. It must support Whisper-style segment timestamps; a chat model alone is insufficient. Choose English, Chinese or automatic language detection.
 - **Image OCR:** Full edition includes local Chinese/English RapidOCR. Only pages without native text are recognized. Alternatively configure the DeepSeek vision OCR adapter. OCR reads text; it does not guarantee interpretation of diagrams or flows.
-- **Key point summary:** Supply a DeepSeek text API connection or your local llama.cpp service. DeepSeek defaults to thinking off. Text summarization is optional; recognition and manual archives work without it. New AI drafts use the selected interface language, retaining original quotations and code.
+- **Key point summary:** Supply a DeepSeek text API connection or your local llama.cpp service. Choose the thinking level in the DeepSeek connection settings. Text summarization is optional. Recognition and manual archives work independently. New AI drafts use the selected interface language and retain original quotations and code.
 
 The API edition excludes local recognition engines. Use your speech and image endpoints or download the full edition. Each capability has its own key. A text key is not silently sent to a speech endpoint. Keys are session-only unless you explicitly choose Windows user-scoped secure storage.
 
 ## Review and keep your work
 
 - Preview a suggested page without confirming it. **Confirm match** or **Confirm no match** records your decision. No page matching is automatically confirmed.
-- **Correct this transcript segment** and **Correct extracted text** retain originals and raw recognition records. Changed content makes previous matches and topic drafts require review. Valid unchanged model steps can be reused.
+- Expand a topic's evidence to view the source page or replay the recording. **Correct this transcript segment** and **Correct extracted text** retain originals and raw recognition records. Review affected matches and topic drafts after a correction. Valid unchanged model steps can be reused.
 - Save or discard a text correction before switching language, adding files or archiving. Stop a running task before changing language or connections.
 - **Stop processing** prevents subsequent requests. An active request cannot be revoked and may still be billed. Continue later to reuse completed results.
 - In English archives open **index.html** or **notes.md**. Keep the entire folder to preserve media, relative links, source hashes, original/revised subtitles, evidence and usage records. Original-format records and the compatible Chinese reader are retained alongside the English entry. Existing model drafts are not automatically translated on export.

@@ -18,7 +18,7 @@ from .basic import parse_transcript, prepare_basic
 from .binding import create_binding, save_binding, validate_binding
 from .core import Segment, Unit, file_hash, read_json
 from .desktop_documents import apply_document_text, assemble_documents
-from .desktop_prepare import refresh_candidates
+from .desktop_prepare import active_review_path, refresh_candidates
 from .desktop_time import check_times
 from .ingest import extract_pdf
 from .task_runtime import atomic_json
@@ -237,13 +237,13 @@ def _prepare_revision(stage: Path, final: Path, meta: dict, appended: list[dict]
         atomic_json(manifest_path, manifest)
     time_checks = check_times(audio, content["segments"])
     atomic_json(prepared / "time_checks.json", time_checks)
-    refresh_candidates(prepared, old / "review.json")
+    refresh_candidates(prepared, active_review_path(stage, previous_meta, old), previous_prepared=old)
     full = bool(pdf and audio and content["units"] and content["segments"])
     if full:
         save_binding(prepared / "archive_binding.json", create_binding(prepared, audio, pdf))
         validate_binding(read_json(prepared / "archive_binding.json"), prepared, audio, pdf)
     warnings = meta.get("preparation_warnings", []) + [warning for row in assembled["conversions"] for warning in row["warnings"]]
-    warnings.append("已补充资料，原有对应关系和重点草稿需重新核对；原件、识别结果和历史版本均保留。")
+    warnings.append("已补充资料。请核对受影响的对应关系与重点草稿；原件、识别结果和历史版本均保留。")
     if user_subtitle and previous_meta.get("transcript"):
         warnings.append("新提供的字幕已替代当前转写；旧转写文件、识别记录和人工修订仍保留在项目历史中。")
     if time_checks.get("within_audio_bounds") is False:

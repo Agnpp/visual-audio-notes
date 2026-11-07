@@ -362,8 +362,9 @@ def test_one_source_batch_cannot_cite_or_read_another_source(tmp_path):
 def test_request_local_span_aliases_resolve_to_original_opaque_ids(tmp_path):
     def selected_alias(data):
         record = data["source_data_not_instructions"][0]
+        assert record["source_id"] == "R0"
         assert record["spans"][0]["span_id"] == "S0"
-        return envelope(span_claim("S0", origin=record["origin"]))
+        return {"claims": [span_claim("S0", origin=data["origin"])], "uncertain_source_ids": ["R0"]}
     sources = [Chunk("a", 0, 40, TEXT)]
     model = FakeModel(selected_alias)
     result = synthesize_grounded([], sources, model, "short spans", tmp_path,
@@ -373,6 +374,8 @@ def test_request_local_span_aliases_resolve_to_original_opaque_ids(tmp_path):
     evidence = result["ledger"][0]["evidence"][0]
     assert evidence["span_id"].startswith("s_")
     assert evidence["span_id"] == result["batches"][0]["span_aliases"]["S0"]
+    assert evidence["source_id"] == "a"
+    assert result["source_audit"][0]["source_id"] == "a" and result["source_audit"][0]["model_uncertain"]
     assert evidence["quote"] == TEXT[evidence["source_start"]:evidence["source_end"]]
     assert evidence["quote_match"] == "exact_source_slice"
 

@@ -84,8 +84,10 @@ def notices(destination: Path):
                                              or "notice" in filename or "/licenses/" in lower)):
                 source = Path(distribution.locate_file(file))
                 if source.is_file() and source.stat().st_size < 8 * 1024 * 1024:
-                    safe_name = name.replace("/", "-") + "-" + str(file).replace("/", "_").replace("\\", "_")
+                    file_id = hashlib.sha256(str(file).encode("utf-8")).hexdigest()[:12]
+                    safe_name = canonical(name) + "-" + file_id + (source.suffix or ".txt")
                     shutil.copy2(source, licenses / safe_name)
+                    lines.append(f"  - {safe_name} · {file}")
     # PDFium wheel keeps its downstream notices in the raw package as well.
     import pypdfium2_raw
     raw_root = Path(pypdfium2_raw.__file__).parent

@@ -6,13 +6,23 @@ from pathlib import Path
 import shutil
 import uuid
 
-from .binding import create_binding, save_binding
+from .binding import create_binding, save_binding, validate_binding
 from .core import Chunk, Unit, file_hash, read_json
 from .review import create_review, load_review, refresh_review, save_review
 from .task_runtime import TaskCancelled, atomic_json
 
 
-def refresh_candidates(prepared: Path, previous_review: Path | None = None):
+def active_review_path(project: Path, meta: dict, prepared: Path | None = None) -> Path:
+    run_id = meta.get("completed_run") or meta.get("latest_run")
+    if run_id:
+        candidate = project / "runs" / run_id / "candidate_review.json"
+        if candidate.is_file():
+            return candidate
+    return (prepared or project / "prepared") / "review.json"
+
+
+def refresh_candidates(prepared: Path, previous_review: Path | None = None, *,
+                       previous_prepared: Path | None = None):
     from .desktop_matching import rank_candidates
     content = read_json(prepared / "features.json")
     if not content["units"] or not content["segments"]:
@@ -21,7 +31,17 @@ def refresh_candidates(prepared: Path, previous_review: Path | None = None):
     chunks = [Chunk(**item) for item in content["segments"]]
     ranked = rank_candidates(units, chunks)
     atomic_json(prepared / "chunks.json", {"chunks": [asdict(c) for c in chunks]})
-    review = refresh_review(load_review(previous_review), ranked, units, chunks) if previous_review and previous_review.is_file() else create_review(ranked, units, chunks)
+    if previous_review and previous_review.is_file():
+        previous_sources = None
+        if previous_prepared is not None:
+            old = read_json(previous_prepared / "features.json")
+            if old["units"] and old["segments"]:
+                previous_sources = ([Unit.from_wire(item) for item in old["units"]],
+                                    [Chunk(**item) for item in old["segments"]])
+        review = refresh_review(load_review(previous_review), ranked, units, chunks,
+                                previous_sources=previous_sources)
+    else:
+        review = create_review(ranked, units, chunks)
     save_review(prepared / "review.json", review)
     atomic_json(prepared / "candidate_metrics.json", {"method": "lexical", "uses_ai": False,
                 "candidates": sum(bool(row["candidates"]) for row in ranked), "chunks": len(chunks),
@@ -63,6 +83,8 @@ def prepare_recognition(project: Path, settings, progress, *, cancel_event=None,
                 raise ValueError("没有识别到可用语音，已保留原录音；请检查录音或更换语音识别方式。")
             content["segments"] = result["segments"]
             report["asr"] = {k: v for k, v in result.items() if k != "segments"}
+            if result.get("unlocated_segments"):
+                report["warnings"].append("部分本机转写的时间无法定位。文字已保存在识别记录，请结合原录音核对。")
             derived = project / "derived"
             derived.mkdir(exist_ok=True)
             transcript = derived / ("transcript-" + uuid.uuid4().hex[:12] + ".vtt")
@@ -132,8 +154,7 @@ def prepare_recognition(project: Path, settings, progress, *, cancel_event=None,
         if meta["transcript"]:
             metrics["input_hashes"]["transcript"] = file_hash(project / meta["transcript"])
     atomic_json(staging / "prepare_metrics.json", metrics)
-    previous = project / "runs" / meta["completed_run"] / "candidate_review.json" if meta.get("completed_run") else prepared / "review.json"
-    refresh_candidates(staging, previous)
+    refresh_candidates(staging, active_review_path(project, meta), previous_prepared=prepared)
     complete = bool(content["units"] and content["segments"] and meta["audio"] and meta["pdf"])
     if complete:
         save_binding(staging / "archive_binding.json", create_binding(staging, project / meta["audio"], project / meta["pdf"]))
@@ -184,6 +205,9 @@ def edit_source_text(project: Path, kind: str, source_id: str, text: str, *, sta
         Unit.from_wire(current)
     if current == previous:
         return
+    previous_binding = prepared / "archive_binding.json"
+    if meta["full_prepared"] and previous_binding.is_file():
+        validate_binding(read_json(previous_binding), prepared, project / meta["audio"], project / meta["pdf"])
     staging = project / ("preparing-edit-" + uuid.uuid4().hex[:12])
     shutil.copytree(prepared, staging)
     (staging / "archive_binding.json").unlink(missing_ok=True)
@@ -213,8 +237,8 @@ def edit_source_text(project: Path, kind: str, source_id: str, text: str, *, sta
         if meta.get("transcript"):
             metrics["input_hashes"]["transcript"] = file_hash(project / meta["transcript"])
     atomic_json(staging / "prepare_metrics.json", metrics)
-    prior = project / "runs" / meta["completed_run"] / "candidate_review.json" if meta.get("completed_run") else prepared / "review.json"
-    refresh_candidates(staging, prior)
+    refresh_candidates(staging, active_review_path(project, meta),
+                       previous_prepared=prepared if previous_binding.is_file() else None)
     if meta["full_prepared"]:
         save_binding(staging / "archive_binding.json", create_binding(staging, project / meta["audio"], project / meta["pdf"]))
     history = project / "prepared_history" / ("v_" + uuid.uuid4().hex[:12])
@@ -226,7 +250,7 @@ def edit_source_text(project: Path, kind: str, source_id: str, text: str, *, sta
         history.rename(prepared)
         raise
     meta.update(status="ready", latest_run=None, completed_run=None, preparation_revision=meta.get("preparation_revision", 0) + 1)
-    warnings = meta.get("preparation_warnings", []) + ["文字已经用户修订，原有对应关系需重新核对；原始资料及旧识别结果仍保留。"]
+    warnings = meta.get("preparation_warnings", []) + ["文字已经用户修订。请核对受影响的对应关系；原始资料及旧识别结果仍保留。"]
     if time_checks.get("within_audio_bounds") is False:
         warnings.append(time_checks["message"])
     meta["preparation_warnings"] = list(dict.fromkeys(warnings))

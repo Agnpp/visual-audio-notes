@@ -49,8 +49,11 @@ def test_append_document_preserves_corrected_ocr_transcript_notes_and_history(tm
     assert previous_page['text'] == 'API text explicitly corrected by the user.'
     assert previous_page['text_origin'] == 'user_corrected'
     assert result['pipeline_needs'] == {'asr': False, 'ocr': False}
-    assert result['review_items'][0]['status'] == 'needs_review'
-    assert result['review_items'][0]['confirmed_unit_ids'] == []
+    assert result['review_items'][0]['status'] == 'confirmed'
+    assert result['review_items'][0]['confirmed_unit_ids'] == [uid]
+    audit = read_json(root/'prepared/review.json')
+    assert audit['history'][-1]['event'] == 'decision_carried'
+    assert audit['items'][0]['review']['source_revision'] < audit['source_revision']
     assert result['topics'] == {'audio': [], 'courseware': []}
     assert file_hash(root/'prepared/recognition_sources.json') == recognition_hash
     assert file_hash(root/'prepared/corrections.json') == corrections_hash
@@ -65,6 +68,7 @@ def test_append_document_preserves_corrected_ocr_transcript_notes_and_history(tm
     out = tmp_path/'appended-archive'
     store.export_project(project['id'], out)
     assert read_json(out/'project.json')['transcript_kind'] == 'user_edited'
+    assert read_json(out/'project.json')['human_confirmed_single_page_mappings'] == 1
     assert len(read_json(out/'原件清单.json')['originals']) == 4
     assert file_hash(out/'识别记录.json') == recognition_hash
     assert 'API text explicitly corrected' in (out/'识别文字.md').read_text(encoding='utf-8')

@@ -306,6 +306,10 @@ class DeepSeekJsonModel:
                                  ("prompt_tokens", "completion_tokens", "total_tokens",
                                   "prompt_cache_hit_tokens", "prompt_cache_miss_tokens")
                                  if isinstance(usage, dict) and type(usage.get(name)) is int and usage[name] >= 0}
+                completion_details = usage.get("completion_tokens_details") if isinstance(usage, dict) else None
+                reasoning = completion_details.get("reasoning_tokens") if isinstance(completion_details, dict) else None
+                if type(reasoning) is int and 0 <= reasoning <= call["usage"].get("completion_tokens", -1):
+                    call["reasoning_tokens"] = reasoning
                 if call["actual_model"]:
                     self.observed_models.add(call["actual_model"])
                 choices = envelope["choices"]
@@ -317,9 +321,11 @@ class DeepSeekJsonModel:
                 finish = choice.get("finish_reason")
                 call["finish_reason"] = _safe_metadata(finish, key)
                 if finish != "stop":
+                    call["response_error"] = "output_limit" if finish == "length" else "incomplete_response"
                     raise ProviderError("Provider output was incomplete or stopped without a final JSON answer")
                 text = choice["message"]["content"]
                 if not isinstance(text, str) or not text.strip():
+                    call["response_error"] = "blank_json"
                     raise ProviderError("Provider returned blank JSON content")
                 result = _strict_json(text)
                 if not isinstance(result, dict):
@@ -327,13 +333,17 @@ class DeepSeekJsonModel:
             except ProviderError:
                 raise
             except (ValueError, KeyError, TypeError, UnicodeError):
+                call["response_error"] = "invalid_json"
                 raise ProviderError("Provider returned an invalid JSON response") from None
             if validator is not None:
                 try:
-                    if next(validator.iter_errors(result), None) is not None:
-                        raise ValueError()
+                    error = next(validator.iter_errors(result), None)
                 except Exception:
+                    call["response_error"] = "invalid_schema"
                     raise ProviderError("Provider JSON failed local schema validation") from None
+                if error is not None:
+                    call["response_error"] = "schema_limit" if error.validator == "maxItems" else "schema_mismatch"
+                    raise ProviderError("Provider JSON failed local schema validation")
             call["status"] = "validated"
             return result
         except urllib.error.HTTPError as exc:

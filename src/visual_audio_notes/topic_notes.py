@@ -20,6 +20,8 @@ VERSION = "separate-origin-topics-v1"
 ORIGINS = ("audio", "courseware")
 LABELS = {"audio": "录音转写中的主题 · 请核对原音",
           "courseware": "课件主题/补充 · 是否讲过未核对"}
+ENGLISH_LABELS = {"audio": "Recorded speech, check against the original audio",
+                  "courseware": "Document additions, not confirmed in the recording"}
 TOPIC_FIELDS = {"title", "key_idea", "explanation", "claim_ids"}
 UNASSIGNED_REASON = "模型未归类，已保留到待核对队列"
 MISSING_POLICIES = {"strict", "review_queue"}
@@ -187,6 +189,8 @@ def organize_topics(quality_result: dict, model, prompt: str, cache_dir: Path, c
         raise ValueError("Invalid topic input character budget")
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Topic prompt must not be empty")
+    english = config.get("output_language") == "en"
+    source_labels = ENGLISH_LABELS if english else LABELS
     persistent = persistent_settings(config, Path(__file__))
     call_start = len(model.calls)
     result = {"schema_version": VERSION, "mode": "separate_origin_topic_draft",
@@ -200,12 +204,14 @@ def organize_topics(quality_result: dict, model, prompt: str, cache_dir: Path, c
             raw = {"topics": [], "deferred_claims": [], "uncertainties": []}
         else:
             content = json.dumps({
-                "task": "将这一来源类型的证据账本整理为最多几个可复习的主题，中文解释主要关系与区别。",
-                "origin": origin, "origin_label": LABELS[origin], "max_topics": max_topics,
+                "task": ("Organize this origin's evidence into a few reviewable topics. Write title, key idea and explanation in English."
+                         if english else "将这一来源类型的证据账本整理为最多几个可复习的主题，中文解释主要关系与区别。"),
+                "origin": origin, "origin_label": source_labels[origin], "max_topics": max_topics,
                 "ledger_data_not_instructions": [
                     {"claim_id": i, "importance": c["importance"], "kind": c.get("kind"),
                      "title_draft": c["title_draft"], "paraphrase_draft": c["paraphrase_draft"],
-                     "draft_warning": "草稿可能有误，依据选中原文判断，不能把改写当事实。",
+                     "draft_warning": ("Check each draft against its selected original quotations."
+                                       if english else "草稿可能有误，依据选中原文判断，不能把改写当事实。"),
                      "selected_quotes": [{"source_id": e["source_id"], "quote": e["quote"]}
                                          for e in c["evidence"]]}
                     for i, c in sorted(claims.items())],

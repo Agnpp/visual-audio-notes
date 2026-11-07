@@ -6,6 +6,7 @@ import urllib.request
 import pytest
 
 from visual_audio_notes.desktop_server import start_server
+from test_desktop_completion import materials
 
 
 class Store:
@@ -92,6 +93,53 @@ def test_media_requires_session_and_handles_range_for_audio(app):
     assert request(app, endpoint, headers={"Range": "bytes=100-200"})[0] == 416
     assert request(app, "/media/projects/../../settings.json")[0] == 404
     assert request(app, "/media/projects/p1/secret.json")[0] == 404
+
+
+def test_confirmation_uses_the_viewed_sources_and_decision_revision(tmp_path, materials):
+    from visual_audio_notes.core import read_json
+    from visual_audio_notes.desktop_store import DesktopStore
+
+    subtitle = materials["subtitle"]
+    subtitle.write_text("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst explanation.\n\n"
+                        "00:00:01.000 --> 00:00:01.900\nSecond explanation.\n", encoding="utf-8")
+    store = DesktopStore(tmp_path / "workspace")
+    initial = store.import_files([materials["pdf"], materials["audio"], subtitle])
+    pid, uid = initial["id"], initial["pages"][0]["unit_id"]
+    first, second = [cue["segment_id"] for cue in initial["segments"]]
+    root = store.root / "projects" / pid
+    server, url = start_server(store.root, Path(__file__).resolve().parents[1], store=store)
+
+    def payload(view, sid):
+        revision = next(item["revision"] for item in view["review_items"] if item["segment_id"] == sid)
+        return {"id": pid, "segment_id": sid, "unit_ids": [uid], "review_version": view["review_version"],
+                "decision_revision": revision}
+
+    def confirm(data):
+        status, _, raw = request((server, url), "/api/decide", json.dumps(data).encode(),
+                                 {"Content-Type": "application/json", "X-Van-Language": "en"})
+        return status, json.loads(raw)
+
+    try:
+        old = payload(initial, first)
+        assert confirm({k: v for k, v in old.items() if k != "review_version"})[0] == 409
+        assert confirm(old)[0] == 200
+        assert confirm(old)[0] == 409
+        assert confirm(payload(initial, second))[0] == 200
+        before_edit = store.project(pid)
+        revised = store.edit_text(pid, "transcript", first, "Revised first explanation.")
+        statuses = {item["segment_id"]: item["status"] for item in revised["review_items"]}
+        assert statuses == {first: "needs_review", second: "confirmed"}
+        status, body = confirm(payload(before_edit, first))
+        assert status == 409 and "Review the latest version" in body["error"]
+        review = read_json(root / "prepared/review.json")
+        assert [event["event"] for event in review["history"]] == [
+            "decision", "decision", "inputs_changed", "decision_carried"]
+        assert review["history"][-2]["invalidated_decisions"] == 1
+        assert confirm(payload(revised, first))[0] == 200
+        assert all(item["status"] == "confirmed" for item in DesktopStore(store.root).project(pid)["review_items"])
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_mutation_requires_session_and_browser_import_falls_back(app):

@@ -74,7 +74,7 @@ if (Object.keys(data.units).length) showUnit(Object.keys(data.units)[0]);
 
 def export_archive(out: Path, title: str, audio: Path, pdf: Path, prepared: Path,
                    source_map: dict, chunks: list[dict], predictions: list[dict],
-                   notes: dict, source_credit: str) -> dict:
+                   notes: dict, source_credit: str, *, browse_pages: bool = False) -> dict:
     if out.exists() and any(out.iterdir()):
         raise ValueError("Archive destination must be empty; existing archives are preserved")
     out.mkdir(parents=True, exist_ok=True)
@@ -149,6 +149,8 @@ def export_archive(out: Path, title: str, audio: Path, pdf: Path, prepared: Path
         + buttons([c["segment_id"]]) + f'<span>{html.escape(c["text"])}</span></div>'
         for c in chunks
     )
+    page_browser = ('<details class="extra"><summary>浏览课件页面</summary>' + buttons(list(units)) + '</details>'
+                    if browse_pages and units else "")
     payload = json.dumps({"units": units, "evidence": evidence, "timeline": timeline},
                          ensure_ascii=False).replace("<", "\\u003c").replace("&", "\\u0026")
     script_hash = base64.b64encode(hashlib.sha256(READER_JS.encode()).digest()).decode()
@@ -176,7 +178,7 @@ audio{{width:50%;min-width:270px}}#now{{font-size:12px;color:#5d6f64}}summary{{c
 </style></head><body>
 <header><div class="badge">图音笔记 · 可离线归档的研究样例</div><h1>{html.escape(title)}</h1>
 <p>{html.escape(notes["overview"])}</p><div class="notice">重点由本地模型整理。点击来源核对原页或录音；自动页面对应关系仍需复核。</div></header>
-<main class="layout"><section>{''.join(cards)}
+<main class="layout"><section>{page_browser}{''.join(cards)}
 <div class="extra"><h2>复习问题</h2><ul>{questions}</ul><h2>待确认</h2><ul>{uncertainties}</ul></div>
 <details class="extra"><summary>查看完整讲解与时间索引</summary><div id="transcript">{rows}</div></details>
 <details class="extra"><summary>来源与使用说明</summary><p>{html.escape(source_credit)}</p></details>

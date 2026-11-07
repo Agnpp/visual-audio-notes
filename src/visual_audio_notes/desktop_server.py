@@ -14,6 +14,7 @@ import urllib.parse
 import uuid
 
 from .desktop_locale import localize_payload, translate
+from .review import StaleReviewError
 
 
 MAX_UPLOAD = 512 * 1024 * 1024
@@ -189,6 +190,8 @@ class DesktopHandler(BaseHTTPRequestHandler):
                 raise ValueError("请求内容不正确。")
             result = self._dispatch(path, data)
             self._json({"ok": True, "data": result})
+        except StaleReviewError as error:
+            self._error(str(error), 409)
         except (ValueError, TypeError, KeyError, OSError) as error:
             # Application validation is controlled and Chinese; unexpected
             # exceptions never expose a traceback or credential-bearing input.
@@ -236,7 +239,12 @@ class DesktopHandler(BaseHTTPRequestHandler):
         if path == "/api/models":
             return store.discover_models(data)
         if path == "/api/decide":
-            return store.decide(data["id"], data["segment_id"], data.get("unit_ids", []), data.get("decision", "match"))
+            version, revision = data.get("review_version"), data.get("decision_revision")
+            if not isinstance(version, str) or type(revision) is not int:
+                raise StaleReviewError()
+            return store.decide(data["id"], data["segment_id"], data.get("unit_ids", []),
+                                data.get("decision", "match"), expected_version=version,
+                                expected_revision=revision)
         if path == "/api/export":
             base = None
             if self.server.native_window is not None:

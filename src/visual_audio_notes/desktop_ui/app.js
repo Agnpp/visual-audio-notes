@@ -24,7 +24,11 @@
     if (method !== 'GET') { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body || {}); }
     const response = await fetch('/api/' + action, options);
     let result; try { result = await response.json(); } catch (_) { throw new Error(t('暂时无法连接资料库，请重新打开软件。')); }
-    if (!response.ok || result.ok === false) throw new Error(result.error || t('操作没有完成，请稍后重试。'));
+    if (!response.ok || result.ok === false) {
+      const error = new Error(result.error || t('操作没有完成，请稍后重试。'));
+      error.status = response.status;
+      throw error;
+    }
     return result.data === undefined ? result : result.data;
   }
 
@@ -134,6 +138,8 @@
   }
   function renderTopics() {
     const container = $('topic-notes'); container.replaceChildren(); let total = 0;
+    const pages = new Map((ui.project.pages || []).map(page => [page.unit_id, page]));
+    const cues = new Map((ui.project.chunks?.length ? ui.project.chunks : ui.project.segments || []).map(cue => [cue.segment_id, cue]));
     const transcriptLabel = { generated_asr: t('模型转写'), user_edited: t('修订转写'), user_provided_transcript: t('导入转写') }[ui.project.transcript_origin] || t('录音转写');
     for (const [origin, title, description] of [['audio', t('录音讲到 · 依据') + transcriptLabel, t('转写可能有误，请结合原音核对。')], ['courseware', t('课件补充 · 未确认讲过'), t('来自课件的内容，不代表这段录音讲到了。')]]) {
       const topics = ui.project.topics?.[origin] || []; if (!topics.length) continue; total += topics.length;
@@ -144,7 +150,23 @@
         if (topic.explanation) card.append(el('p', 'explanation', topic.explanation));
         if (topic.evidence?.length) {
           const details = el('details', 'topic-evidence'); details.append(el('summary', '', t('查看原文依据 · ') + topic.evidence.length + t(' 条')));
-          for (const evidence of topic.evidence) details.append(el('p', '', typeof evidence === 'string' ? evidence : evidence.quote || evidence.text || evidence.source_id || ''));
+          for (const evidence of topic.evidence) {
+            const cue = origin === 'audio' ? cues.get(evidence?.source_id) : null;
+            const page = origin === 'courseware' ? pages.get(evidence?.source_id) : null;
+            if (cue && (ui.project.audio_path || ui.project.audio)) {
+              const replay = el('button', 'text-button topic-reference', t('回听原音') + ' · ' + time(cue.start));
+              replay.type = 'button';
+              replay.addEventListener('click', () => playFrom(cue.start));
+              details.append(replay);
+            } else if (page) {
+              const open = el('button', 'text-button topic-reference', t('查看原页') + ' · ' + pageLabel(page));
+              open.type = 'button';
+              open.addEventListener('click', () => showPage(page.unit_id));
+              details.append(open);
+            }
+            const quote = typeof evidence === 'string' ? evidence : evidence?.quote || evidence?.text;
+            if (quote) details.append(el('p', '', quote));
+          }
           card.append(details);
         } else if (topic.claim_ids?.length) card.append(el('div', 'topic-evidence', topic.claim_ids.length + t(' 条原文依据已保留在归档中')));
         container.append(card);
@@ -153,6 +175,23 @@
     if (!total) {
       const empty = el('div', 'notes-empty'); empty.append(icon('spark'), el('strong', '', t('重点笔记，从这里开始')), el('p', '', t('点击“开始整理”，按设置识别所需内容。配置文字 AI 后，再归纳重点；现在也能直接阅读、记录和归档。'))); container.append(empty);
     }
+  }
+  function playFrom(start) {
+    const player = $('audio-player');
+    try {
+      if (Number.isFinite(player.duration) && start >= player.duration) throw new Error();
+      player.currentTime = start;
+      player.play().catch(() => toast(t('录音暂时无法播放，请检查文件。'), true));
+    } catch (_) {
+      toast(t('录音暂时无法播放，请检查文件。'), true);
+    }
+  }
+  function showPage(unitId) {
+    const index = ui.project.pages.findIndex(page => page.unit_id === unitId);
+    if (index < 0) return;
+    ui.page = index;
+    renderPages();
+    switchTab('sources');
   }
   function renderPages() {
     const pages = ui.project.pages || []; ui.page = Math.max(0, Math.min(ui.page, pages.length - 1));
@@ -179,23 +218,25 @@
     if (!segments.length) { container.append(el('div', 'transcript-empty', query ? t('没有找到相关转写。') : t('还没有转写文字。\n点击“开始整理”使用已选语音能力；已有 SRT / VTT 也可以直接复用。\n未识别的录音不会冒充已完成转写。'))); return; }
     for (const segment of segments) {
       const row = el('div', 'transcript-cue'), button = el('button', 'cue-time'); button.type = 'button'; button.append(icon('play'), document.createTextNode(time(segment.start))); button.title = t('从 ') + time(segment.start) + t(' 回听'); button.disabled = !(ui.project.audio_path || ui.project.audio);
-      button.addEventListener('click', () => { const player = $('audio-player'); player.currentTime = Number(segment.start); player.play().catch(() => toast(t('录音暂时无法播放，请检查文件。'), true)); });
+      button.addEventListener('click', () => playFrom(segment.start));
       const body = el('div', 'cue-body'); body.append(el('p', 'cue-text', segment.text));
       const review = (ui.project.review_items || []).find(item => item.segment_id === segment.segment_id);
+      const reviewContext = { id: ui.project.id, segment_id: segment.segment_id,
+        review_version: ui.project.review_version, decision_revision: review?.revision };
       const suggestions = (review?.candidates || []).slice(0, 3).map(candidate => ({ ...candidate, page: (ui.project.pages || []).find(page => page.unit_id === candidate.unit_id) })).filter(candidate => candidate.page);
       if (suggestions.length && !['confirmed', 'confirmed_unmatched'].includes(review?.status)) {
         const box = el('div', 'candidate-suggestions'), method = ui.project.candidate_method || review?.method || '';
         box.append(el('span', 'candidate-caption', method.includes('ai_derived') || ui.project.candidate_uses_ai_derived_terms ? t('AI 草稿词辅助候选 · 需核对') : method === 'lexical' ? t('关键词候选 · 无需 AI · 需核对') : t('内容候选 · 尚未确认')));
         for (const suggestion of suggestions) {
           const item = el('div', 'candidate-item'), preview = el('button', 'candidate-preview'); preview.type = 'button'; preview.append(icon('file'), el('span', '', t('建议 ') + pageLabel(suggestion.page))); preview.title = t('预览此页，不确认对应关系');
-          preview.addEventListener('click', () => { ui.page = ui.project.pages.findIndex(page => page.unit_id === suggestion.unit_id); renderPages(); switchTab('sources'); });
+          preview.addEventListener('click', () => showPage(suggestion.unit_id));
           const confirm = el('button', 'text-button', t('确认')); confirm.type = 'button'; confirm.disabled = !!sameJobRunning(); confirm.setAttribute('aria-label', t('确认 ') + time(segment.start) + t(' 对应 ') + pageLabel(suggestion.page));
-          confirm.addEventListener('click', () => confirmCorrespondence(segment.segment_id, [suggestion.unit_id], 'match', confirm));
+          confirm.addEventListener('click', () => confirmCorrespondence(reviewContext, [suggestion.unit_id], 'match', confirm));
           item.append(preview, confirm); box.append(item);
         }
         body.append(box);
       }
-      if (review || ui.project.pages?.length) {
+      if (review) {
         const details = el('details', 'cue-review'), summary = el('summary', '', review?.status === 'confirmed' ? t('已确认对应 · 查看或修改') : review?.status === 'confirmed_unmatched' ? t('已确认无对应 · 修改') : t('核对课件对应')); details.append(summary);
         const controls = el('div', 'cue-review-controls'), select = el('select'); select.setAttribute('aria-label', t('为 ') + time(segment.start) + t(' 的讲解选择课件'));
         const empty = el('option', '', t('选择对应课件页')); empty.value = ''; select.append(empty);
@@ -205,8 +246,8 @@
         const confirm = el('button', 'text-button', t('确认对应')); confirm.type = 'button'; confirm.disabled = true;
         select.addEventListener('change', () => { confirm.disabled = !select.value; });
         const noMatch = el('button', 'text-button muted-action', t('确认无对应')); noMatch.type = 'button';
-        confirm.addEventListener('click', () => confirmCorrespondence(segment.segment_id, [select.value], 'match', confirm));
-        noMatch.addEventListener('click', () => confirmCorrespondence(segment.segment_id, [], 'no_match', noMatch));
+        confirm.addEventListener('click', () => confirmCorrespondence(reviewContext, [select.value], 'match', confirm));
+        noMatch.addEventListener('click', () => confirmCorrespondence(reviewContext, [], 'no_match', noMatch));
         controls.append(select, confirm, noMatch); details.append(controls, el('p', 'cue-review-hint', t('仅在你核对原页和原音后记录；浏览或播放不会自动确认。'))); body.append(details);
       }
       body.append(correctionEditor('transcript', segment.segment_id, segment, t('修正这段转写'), t('修正 ') + time(segment.start) + t(' 的转写')));
@@ -218,7 +259,7 @@
     const details = el('details', 'source-correction'); details.dataset.sourceId = sourceId; details.open = !!draft;
     details.append(el('summary', '', label));
     const editor = el('div', 'source-edit-body'), textarea = el('textarea', 'source-edit-text'); textarea.rows = 4; textarea.value = draft?.text ?? source.text ?? ''; textarea.setAttribute('aria-label', accessibleLabel); textarea.dataset.lockDuringJob = 'true'; textarea.disabled = !!isRunning();
-    const hint = el('p', 'source-edit-hint', t('保留原件与原识别结果；资料内容变化后，原对应关系需重新核对，未改动的模型批次会复用。'));
+    const hint = el('p', 'source-edit-hint', t('修订会保留原件和原识别结果。请重新核对受影响的对应关系。'));
     const status = el('span', 'source-edit-status', draft ? t('修订尚未保存') : ''), actions = el('div', 'source-edit-actions'), save = el('button', 'secondary-button compact', t('保存修订')), discard = el('button', 'text-button muted-action', t('取消本次修订')); save.type = 'button'; save.dataset.lockDuringJob = 'true'; save.disabled = !!isRunning(); discard.type = 'button'; discard.dataset.lockDuringJob = 'true'; discard.disabled = !!isRunning();
     let start, end;
     const remember = () => { const value = { text: textarea.value }; if (kind === 'transcript') { value.start = start.value; value.end = end.value; } ui.sourceDrafts.set(key, value); status.textContent = t('修订尚未保存'); };
@@ -249,10 +290,27 @@
     } catch (error) { toast(error.message, true, 8000); }
     finally { controls.forEach(control => { control.dataset.saving = 'false'; control.disabled = !!isRunning(); }); }
   }
-  async function confirmCorrespondence(segmentId, unitIds, decision, button) {
-    if (!ui.selected || (decision === 'match' && !unitIds[0])) return;
+  async function confirmCorrespondence(context, unitIds, decision, button) {
+    if (ui.selected !== context.id || !context.review_version || sameJobRunning() ||
+        (decision === 'match' && !unitIds[0])) return;
     button.disabled = true;
-    try { await saveNotes(true); const project = await api('decide', { id: ui.selected, segment_id: segmentId, unit_ids: unitIds, decision }); ui.project = project; const i = ui.state.projects.findIndex(p => p.id === project.id); if (i >= 0) ui.state.projects[i] = project; renderList(); renderTranscript(); toast(decision === 'match' ? t('已记录你确认的对应关系。') : t('已记录：这段讲解没有对应课件。')); } catch (error) { toast(error.message, true); button.disabled = false; }
+    try {
+      await saveNotes(true);
+      const project = await api('decide', { ...context, unit_ids: unitIds, decision });
+      const index = ui.state.projects.findIndex(p => p.id === project.id);
+      if (index >= 0) ui.state.projects[index] = project;
+      renderList();
+      if (ui.selected === project.id) {
+        ui.project = project;
+        renderTranscript();
+      }
+      toast(decision === 'match' ? t('已记录你确认的对应关系。') : t('已记录：这段讲解没有对应课件。'));
+    } catch (error) {
+      if (error.status === 409 && ui.selected === context.id) await refresh({ reloadProject: true });
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
   }
   function renderJob() {
     $('interface-language').disabled = !!isRunning();

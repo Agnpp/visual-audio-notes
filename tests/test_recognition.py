@@ -163,10 +163,17 @@ def test_local_asr_preserves_source_times_and_caches(audio, tmp_path, monkeypatc
             observed.append(kwargs)
         def transcribe(self, path, **kwargs):
             assert kwargs["vad_filter"]
-            return iter([SimpleNamespace(start=.2, end=.9, text=" important distinction ")]), SimpleNamespace(duration=1., language="en")
+            return iter([SimpleNamespace(start=.2, end=.9, text=" important distinction "),
+                         SimpleNamespace(start=.91, end=2.28, text=" unreliably timed tail ")]), SimpleNamespace(duration=1., language="en")
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=Engine))
     result = r.transcribe(audio, {"provider": "local_whisper", "model_path": str(model)}, tmp_path / "cache")
     assert result["segments"][0]["start"] == .2 and result["segments"][0]["end"] == .9
+    assert len(result["segments"]) == 1
+    assert result["unlocated_segments"] == [{"row": 1, "reason": "invalid_local_asr_time",
+                                            "text": " unreliably timed tail ",
+                                            "reported_start": .91, "reported_end": 2.28}]
+    assert r.transcribe(audio, {"provider": "local_whisper", "model_path": str(model)},
+                        tmp_path / "cache")["unlocated_segments"] == result["unlocated_segments"]
     assert observed[0]["local_files_only"] and observed[0]["compute_type"] == "int8"
     assert not result["api_calls"]
 

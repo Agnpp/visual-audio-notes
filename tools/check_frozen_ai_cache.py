@@ -97,9 +97,13 @@ def check(flavor):
         assert len(calls)==4 and len(generated['topics']['audio'])==len(generated['topics']['courseware'])==1
         longest=max(len(str(p)) for p in (data/'projects'/project['id']/'.van-cache').glob('*.json.lock'))
         assert longest>260,longest
-        generate(); assert len(calls)==4,'Same task must reuse validated results without more calls'
-        api('decide',{'id':project['id'],'segment_id':generated['segments'][0]['segment_id'],
-            'unit_ids':[generated['pages'][0]['unit_id']]})
+        generated = generate()
+        assert len(calls)==4,'Same task must reuse validated results without more calls'
+        segment_id = generated['segments'][0]['segment_id']
+        review = next(item for item in generated['review_items'] if item['segment_id'] == segment_id)
+        api('decide',{'id':project['id'],'segment_id':segment_id,
+            'unit_ids':[generated['pages'][0]['unit_id']], 'review_version':generated['review_version'],
+            'decision_revision':review['revision']})
         archive=Path(api('export',{'id':project['id']})['path'])
         text=(archive/'index.html').read_text(encoding='utf-8')
         assert 'Recorded speech · Based on the transcript' in text

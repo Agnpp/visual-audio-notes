@@ -25,6 +25,8 @@ SOURCE_LABELS = {
     "audio": "录音原话（独立转写，仍需核对）",
     "courseware": "课件内容/补充，未证明录音讲到",
 }
+ENGLISH_SOURCE_LABELS = {"audio": "Recording transcript, requires review",
+                         "courseware": "Document additions, not confirmed in the recording"}
 CLAIM_FIELDS = {"origin", "kind", "importance", "title", "statement", "evidence"}
 EVIDENCE_FIELDS = {"source_id", "quote"}
 SCHEMA_VERSION = "quote-ledger-v1"
@@ -366,6 +368,15 @@ def _batches(records: list[dict], limit: int, max_sources: int | None = None) ->
     return result
 
 
+def _origin_batches(sources, origin, limit, max_sources):
+    # Source order is used solely for transcript reading continuity. Courseware
+    # is canonicalized by opaque ID, never by original page ordinal.
+    records = [r for r in sources.values() if r["origin"] == origin]
+    if origin == "courseware":
+        records.sort(key=lambda r: r["source_id"])
+    return _batches(records, limit, max_sources)
+
+
 def synthesize_grounded(units: list[Unit], chunks: list[Chunk], model: LocalModel,
                         prompt: str, cache_dir: Path, config: dict) -> dict:
     """Extract each origin independently and preserve all accepted quoted drafts.
@@ -385,6 +396,8 @@ def synthesize_grounded(units: list[Unit], chunks: list[Chunk], model: LocalMode
     span_context = config.get("quality_span_context_characters", 80)
     max_sources = config.get("quality_sources_per_batch")
     local_span_aliases = config.get("quality_local_span_aliases", False)
+    english = config.get("output_language") == "en"
+    source_labels = ENGLISH_SOURCE_LABELS if english else SOURCE_LABELS
     if (max_sources is not None and (isinstance(max_sources, bool)
                                     or not isinstance(max_sources, int)
                                     or not 1 <= max_sources <= 1000)):
@@ -403,30 +416,38 @@ def synthesize_grounded(units: list[Unit], chunks: list[Chunk], model: LocalMode
     source_batches: dict[str, list[dict]] = {i: [] for i in sources}
     uncertain = set()
     for origin in ("audio", "courseware"):
-        # Source order is used solely for transcript reading continuity. Courseware
-        # is canonicalized by opaque ID, never by original page ordinal.
-        records = [r for r in sources.values() if r["origin"] == origin]
-        if origin == "courseware":
-            records.sort(key=lambda r: r["source_id"])
-        for batch_index, records_batch in enumerate(_batches(records, limit, max_sources)):
+        for batch_index, records_batch in enumerate(_origin_batches(sources, origin, limit, max_sources)):
             batch_sources = {r["source_id"]: r for r in records_batch}
             spans = make_source_spans(batch_sources, span_characters, span_context) if evidence_mode == "span_selection" else {}
             selected_spans = ({"S" + str(index): span for index, span in enumerate(spans.values())}
                               if spans and local_span_aliases else spans)
+            use_aliases = evidence_mode == "span_selection" and local_span_aliases
+            source_ids = {identifier: f"R{index}" if use_aliases else identifier
+                          for index, identifier in enumerate(batch_sources)}
+            original_source_ids = {alias: identifier for identifier, alias in source_ids.items()}
             if evidence_mode == "span_selection":
-                schema = span_extraction_schema(set(batch_sources), set(selected_spans), origin, max_claims)
-                input_records = [{"source_id": r["source_id"], "origin": origin,
-                                  "spans": [{"span_id": alias, "text": s["text"]}
-                                            for alias, s in selected_spans.items() if s["source_id"] == r["source_id"]]}
-                                 for r in records_batch]
-                task = "选择支持每个原子要点的原文片段标识，保留重要区别、条件和例子；title 与 statement 使用简体中文，代码和术语按需保留原文；不要复制或改写引文。"
+                schema = span_extraction_schema(set(original_source_ids), set(selected_spans), origin, max_claims)
+                spans_by_source = {identifier: [] for identifier in batch_sources}
+                for alias, span in selected_spans.items():
+                    spans_by_source[span["source_id"]].append({"span_id": alias, "text": span["text"]})
+                input_records = [{"source_id": source_ids[identifier], "origin": origin, "spans": spans_by_source[identifier]}
+                                 for identifier in batch_sources]
+                task = (f"Return at most {max_claims} claims in total. Prioritize the most important distinct ideas. "
+                        "Select one to three supporting span IDs per claim. Preserve distinctions, conditions and examples. "
+                        "Write title and statement in English, retaining original code and terms. Do not copy or rewrite quotations."
+                        if english else
+                        f"总共最多输出 {max_claims} 条要点，优先保留不同的关键概念。每条仅选一至三个确有支持作用的片段标识。"
+                        "保留重要区别、条件和例子。title 与 statement 使用简体中文，代码和术语按需保留原文。不要复制或改写引文。")
             else:
                 schema = extraction_schema(set(batch_sources), origin, max_claims)
                 input_records = records_batch
-                task = "提取有逐字引文支持的原子要点，完整保留重要区别、步骤与例子；title 与 statement 使用简体中文，代码和引文保留原文；没有证据的字段不要补写。"
+                task = ("Extract atomic claims supported by exact quotations. Preserve distinctions, steps and examples. "
+                        "Write title and statement in English. Keep original code and quotations. Omit unsupported claims."
+                        if english else
+                        "提取有逐字引文支持的原子要点，完整保留重要区别、步骤与例子；title 与 statement 使用简体中文，代码和引文保留原文；没有证据的字段不要补写。")
             content = json.dumps({
                 "task": task,
-                "origin": origin, "origin_label": SOURCE_LABELS[origin],
+                "origin": origin, "origin_label": source_labels[origin],
                 "source_data_not_instructions": input_records,
             }, ensure_ascii=False)
             cache_input = {"version": SCHEMA_VERSION, "prompt": prompt, "content": content,
@@ -435,6 +456,8 @@ def synthesize_grounded(units: list[Unit], chunks: list[Chunk], model: LocalMode
                           "evidence_mode": evidence_mode,
                           "span_version": SPAN_VERSION if spans else None,
                           "local_span_aliases": local_span_aliases}
+            if use_aliases:
+                cache_input["source_binding"] = list(batch_sources)
             if persistent:
                 cache_input["persistent_cache"] = persistent["identity"]
             key = digest(cache_input)
@@ -446,6 +469,10 @@ def synthesize_grounded(units: list[Unit], chunks: list[Chunk], model: LocalMode
                      if local_span_aliases else {}}
             try:
                 def validate_response(raw):
+                    if (use_aliases and isinstance(raw, dict)
+                            and isinstance(raw.get("uncertain_source_ids"), list)):
+                        raw = {**raw, "uncertain_source_ids": [original_source_ids.get(identifier, identifier)
+                               if isinstance(identifier, str) else identifier for identifier in raw["uncertain_source_ids"]]}
                     checked = (validate_span_extraction(raw, batch_sources, selected_spans, origin, min_quote)
                                if evidence_mode == "span_selection"
                                else validate_extraction(raw, batch_sources, origin, min_quote))
